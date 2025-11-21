@@ -17,3 +17,9 @@ LazyData: true
 URL: https://github.com/LaoWang-123/cPME.2
 BugReports: https://github.com/LaoWang-123/cPME.2/issues
 RoxygenNote: 7.3.3
+LinkingTo: 
+    BH,
+    Rcpp,
+    RcppArmadillo
+Imports: 
+    Rcpp

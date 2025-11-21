@@ -30,6 +30,77 @@ compute_E_vectorized <- function(f1, f2, Ugrid) {
 ##################################################
 # bi set function is stored in basis_functions.R
 
+#
+#' Factory that returns a callable dphi function
+#'
+#' @param basis bi
+#' @param grad_f2k_fun grad_f2k_fun
+#' @param f2_fun f2_fun
+#' @param rotated True or False
+#'
+#' @returns a function (u,v) to 3x1 vector
+#'
+make_dphi_fn <- function(basis, grad_f2k_fun, f2_fun, rotated = FALSE) {
+
+  norm_pq <- basis$norm_pq  # ||∇ψ_pq||_L2
+  lambda_pq <- basis$lambda_pq
+  if (!rotated) {
+    # Gradient-type basis (curl-free)
+    # Eq. (11): 1/norm * (-0.5 * λ * ψ * f2^k + ∇f2^k · ∇ψ)
+    psi_fun  <- basis$psi
+    grad_fun <- basis$grad_psi
+
+    # Return a function of (u,v)
+    function(u, v) {
+      (1 / norm_pq) * (-0.5 * lambda_pq * psi_fun(u, v) * f2_fun(u,v) + ( grad_f2k_fun(u,v) %*% grad_fun(u, v)))
+    }
+
+  } else {
+    # Rotated (divergence-free) basis
+    # Eq. (12): 1/norm * (∇f2^k · *∇ψ)
+    rot_fun <- basis$rot_grad_psi
+
+    function(u, v) {
+      (1 / norm_pq) * (grad_f2k_fun(u,v) %*% rot_fun(u, v))
+    }
+  }
+}
+
+# ---------------------------
+# (X) Build dphi^k(b_i) set
+# ---------------------------
+# Reference: Eq.(11)-(12)
+# For each basis field b_i (gradient-type and rotated-type),
+# generate a callable dphi^k(b_i)(u,v) function using make_dphi_fn().
+# Naming follows the same convention as build_bi_set():
+#   "p_q.grad" → non-rotated
+#   "p_q.rot"  → rotated
+
+build_dphi_set <- function(basis_set, grad_f2k_fun, f2_fun) {
+  keys <- sort(names(basis_set))
+  dphi_set <- list()
+
+  for (key in keys) {
+    bs <- basis_set[[key]]
+    # Gradient-type (non-rotated)
+    dphi_set[[paste0(key, ".grad")]] <-
+      make_dphi_fn(basis = bs,
+                   f2_fun = f2_fun,
+                   grad_f2k_fun = grad_f2k_fun,
+                   rotated = FALSE)
+
+    # Rotated-type (rotated)
+    dphi_set[[paste0(key, ".rot")]]  <-
+      make_dphi_fn(basis = bs,
+                   f2_fun = f2_fun,
+                   grad_f2k_fun = grad_f2k_fun,
+                   rotated = TRUE)
+  }
+
+  return(dphi_set)
+}
+
+
 
 
 # ---------------------------
@@ -227,77 +298,6 @@ assemble_grad_f2k_from_state <- function(state_list, gamma_k, f2_grad_fn, epsilo
 #   dphi^k(b_i) = 1 / ||∇ψ_i|| * (∇f2^k · *∇ψ_i)                              # rotated
 
 # We get ∇f2^k(u,v) from assemble_delta_f2k_from_state function defined previously
-
-#
-#' Factory that returns a callable dphi function
-#'
-#' @param basis bi
-#' @param grad_f2k_fun grad_f2k_fun
-#' @param f2_fun f2_fun
-#' @param rotated True or False
-#'
-#' @returns a function (u,v) to 3x1 vector
-#'
-make_dphi_fn <- function(basis, grad_f2k_fun, f2_fun, rotated = FALSE) {
-
-  norm_pq <- basis$norm_pq  # ||∇ψ_pq||_L2
-  lambda_pq <- basis$lambda_pq
-  if (!rotated) {
-    # Gradient-type basis (curl-free)
-    # Eq. (11): 1/norm * (-0.5 * λ * ψ * f2^k + ∇f2^k · ∇ψ)
-    psi_fun  <- basis$psi
-    grad_fun <- basis$grad_psi
-
-    # Return a function of (u,v)
-    function(u, v) {
-      (1 / norm_pq) * (-0.5 * lambda_pq * psi_fun(u, v) * f2_fun(u,v) + ( grad_f2k_fun(u,v) %*% grad_fun(u, v)))
-    }
-
-  } else {
-    # Rotated (divergence-free) basis
-    # Eq. (12): 1/norm * (∇f2^k · *∇ψ)
-    rot_fun <- basis$rot_grad_psi
-
-    function(u, v) {
-      (1 / norm_pq) * (grad_f2k_fun(u,v) %*% rot_fun(u, v))
-    }
-  }
-}
-
-# ---------------------------
-# (X) Build dphi^k(b_i) set
-# ---------------------------
-# Reference: Eq.(11)-(12)
-# For each basis field b_i (gradient-type and rotated-type),
-# generate a callable dphi^k(b_i)(u,v) function using make_dphi_fn().
-# Naming follows the same convention as build_bi_set():
-#   "p_q.grad" → non-rotated
-#   "p_q.rot"  → rotated
-
-build_dphi_set <- function(basis_set, grad_f2k_fun, f2_fun) {
-  keys <- sort(names(basis_set))
-  dphi_set <- list()
-
-  for (key in keys) {
-    bs <- basis_set[[key]]
-    # Gradient-type (non-rotated)
-    dphi_set[[paste0(key, ".grad")]] <-
-      make_dphi_fn(basis = bs,
-                   f2_fun = f2_fun,
-                   grad_f2k_fun = grad_f2k_fun,
-                   rotated = FALSE)
-
-    # Rotated-type (rotated)
-    dphi_set[[paste0(key, ".rot")]]  <-
-      make_dphi_fn(basis = bs,
-                   f2_fun = f2_fun,
-                   grad_f2k_fun = grad_f2k_fun,
-                   rotated = TRUE)
-  }
-
-  return(dphi_set)
-}
-
 
 
 
