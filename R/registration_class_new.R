@@ -1,4 +1,5 @@
 
+
 #' Registration Class for cPME Algorithm
 #'
 #' This class implements the surface registration algorithm used in cPME.
@@ -11,12 +12,15 @@
 #' @docType class
 #' @format An \code{R6Class} generator object
 #' @export
-Registration <- R6::R6Class("Registration",
+Registration_new <- R6::R6Class("Registration",
 
                             public = list(
                               #' @field f1 Function f1(u, v). The target surface embedding or image.
                               #' @field f2 Function f2(u, v). The source surface to be warped.
+                              #' @field f1_grid The output of f1 function with uv-grid.
+                              #' @field f2_grid The output of f2 function with uv-grid.
                               #' @field f2_grad_fn Gradient of f2, a function returning (df/du, df/dv).
+                              #' @field grad_f2_grid The output of f2_grad_fn function with uv-grid.
                               #' @field basis_set A list of basis functions used to build the tangent basis.
                               #' @field Ugrid A data frame of (u, v) evaluation points on [0,1]^2.
 
@@ -45,7 +49,10 @@ Registration <- R6::R6Class("Registration",
                               # ---------------------------------------------------------
                               f1 = NULL,
                               f2 = NULL,
+                              f1_grid = NULL,
+                              f2_grid = NULL,
                               f2_grad_fn = NULL,
+                              grad_f2_grid = NULL,
                               basis_set = NULL,
                               Ugrid = NULL,
 
@@ -136,26 +143,53 @@ Registration <- R6::R6Class("Registration",
       self$gamma_k <- gamma_id
       self$f2_k    <- self$f2
 
-      # Compute initial energy E_0
-      E0 <- compute_E_vectorized(self$f1, self$f2_k, self$Ugrid)
 
       # gradient of f2^0 = Df2
       self$grad_f2k_fun <- self$f2_grad_fn
 
-      # Build dphi basis for iteration 0
-      dphi_set <- build_dphi_set(
-        basis_set     = self$basis_set,
-        grad_f2k_fun  = self$grad_f2k_fun,
-        f2_fun        = self$f2_k
+
+      # # Compute initial energy E_0
+      # E0 <- compute_E_vectorized(self$f1, self$f2_k, self$Ugrid)
+      # # Build dphi basis for iteration 0
+      # dphi_set <- build_dphi_set(
+      #   basis_set     = self$basis_set,
+      #   grad_f2k_fun  = self$grad_f2k_fun,
+      #   f2_fun        = self$f2_k
+      # )
+      #
+      # # Compute coefficients α_i
+      # self$dgamma_coefs <- compute_inner_products(
+      #   f1        = self$f1,
+      #   f2_k      = self$f2_k,
+      #   dphi_list = dphi_set,
+      #   uv_grid   = self$Ugrid
+      # )
+
+      ####################################
+      #### New edited part
+      n=nrow(self$Ugrid)
+      slef$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
+      self$f2_grid <- make_f2_grid(self$f2_k, self$Ugrid)
+
+      # Compute initial energy E_0
+      E0 <- compute_E_grid(slef$f1_grid, self$f2_grid, self$Ugrid)
+
+      self$grad_f2_grid <- make_grad_f2_grid(self$grad_f2k_fun, self$Ugrid)
+
+      dphi_grid_list <- compute_dphi_grid(
+        basis_grid = self$basis_set,
+        f2_grid = self$f2_grid,
+        grad_f2_grid = self$grad_f2_grid
       )
 
-      # Compute coefficients α_i
-      self$dgamma_coefs <- compute_inner_products(
-        f1        = self$f1,
-        f2_k      = self$f2_k,
-        dphi_list = dphi_set,
-        uv_grid   = self$Ugrid
+      self$dgamma_coefs <- compute_inner_products_fast(
+        diff_grid = self$f1_grid-self$f2_grid,
+        dphi_grid_list = dphi_grid_list,
+        weight = 1/n
       )
+      ####################################
+      ####################################
+
 
       # Assemble δγ and Dδγ
       self$delta_gamma_fn  <- assemble_delta_gamma_fn(self$dgamma_coefs, self$bi_set)
@@ -203,8 +237,14 @@ Registration <- R6::R6Class("Registration",
         self$f2(xy[1], xy[2])
       }
 
+      ####################################
+      #### New edited part
+      n=nrow(self$Ugrid)
+      f2_next_grid <- make_f2_grid(f2_next, self$Ugrid)
+
       # --- 4) Compute new energy ---
-      E_curr <- compute_E_vectorized(self$f1, f2_next, self$Ugrid)
+      # E_curr <- compute_E_vectorized(self$f1, f2_next, self$Ugrid)
+      E_curr <- compute_E_grid(self$f1_grid, f2_next_grid)
 
       self$iter <- self$iter + 1
       self$E_history <- c(self$E_history, E_curr)
@@ -229,20 +269,37 @@ Registration <- R6::R6Class("Registration",
         epsilon     = eps
       )
 
-      # --- Build new dϕ(b_i) ---
-      dphi_set <- build_dphi_set(
-        basis_set     = self$basis_set,
-        grad_f2k_fun  = grad_f2k_fun,
-        f2_fun        = f2_next
+      # # --- Build new dϕ(b_i) ---
+      # dphi_set <- build_dphi_set(
+      #   basis_set     = self$basis_set,
+      #   grad_f2k_fun  = grad_f2k_fun,
+      #   f2_fun        = f2_next
+      # )
+      #
+      # # --- Compute new coefficients α_i ---
+      # dgamma_coefs <- compute_inner_products(
+      #   f1        = self$f1,
+      #   f2_k      = f2_next,
+      #   dphi_list = dphi_set,
+      #   uv_grid   = self$Ugrid
+      # )
+      #
+
+      grad_f2_grid <- make_grad_f2_grid(grad_f2k_fun, self$Ugrid)
+      dphi_grid_list <- compute_dphi_grid(
+        basis_grid = self$basis_set,
+        f2_grid = f2_next_grid,
+        grad_f2_grid = grad_f2_grid
       )
 
-      # --- Compute new coefficients α_i ---
-      dgamma_coefs <- compute_inner_products(
-        f1        = self$f1,
-        f2_k      = f2_next,
-        dphi_list = dphi_set,
-        uv_grid   = self$Ugrid
+      dgamma_coefs <- compute_inner_products_fast(
+        diff_grid = self$f1_grid - f2_next_grid,
+        dphi_grid_list = dphi_grid_list,
+        weight = 1/n
       )
+      ####################################
+      ####################################
+
 
       # --- Assemble δγ and Dδγ ---
       delta_gamma_fn  <- assemble_delta_gamma_fn(dgamma_coefs, self$bi_set)
@@ -374,8 +431,7 @@ Registration <- R6::R6Class("Registration",
       saveRDS(self, file.path(self$folder, "reg_state.rds"))
     }
 
-    ) # end public list
+                            ) # end public list
 
 )
-
 

@@ -119,10 +119,9 @@ make_f2_grid <- function(f2_fun, Ugrid) {
 make_grad_f2_grid <- function(grad_f2_fun, Ugrid) {
   n <- nrow(Ugrid)
 
-  # 1. 对所有 grid 点生成一个 list，每个元素是一个 3×2 matrix
+  # 1. each element is 3x2 matrix
   G_list <- lapply(1:n, function(i) grad_f2_fun(Ugrid[i,1], Ugrid[i,2]))
 
-  # 2. 安全检查（只检查第一个）
   G0 <- G_list[[1]]
   if (!is.matrix(G0) || !all(dim(G0) == c(3,2))) {
     stop("grad_f2_fun must return a 3×2 matrix.")
@@ -140,3 +139,16 @@ make_grad_f2_grid <- function(grad_f2_fun, Ugrid) {
   list(Gx = Gx, Gy = Gy)
 }
 
+# ==========================================================
+# Vectorized computation of E = ∫ ||f1(u,v) - f2(u,v)||^2 du dv
+# ----------------------------------------------------------
+# f1, f2 : functions (u,v) -> c(x,y,z)
+# f1_grid, f2_grid, nx3 matrix
+
+compute_E_grid <- function(f1_grid, f2_grid) {
+
+  diff_sq <- rowSums((f1_grid - f2_grid)^2)
+
+  E_val <- mean(diff_sq)
+  return(E_val)
+}
