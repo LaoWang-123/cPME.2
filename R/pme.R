@@ -206,7 +206,7 @@ pme <- function(
     MSD = mse,
     coefs = coefs,
     parameterization = parameterization,
-    params_opt = params_opt,
+    params_opt = params_opt, # I add this
     tuning_vec = lambda,
     embeddings = embeddings,
     initialization_algorithm = initialization_algorithm

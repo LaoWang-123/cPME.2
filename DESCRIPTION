@@ -22,5 +22,15 @@ LinkingTo:
     Rcpp,
     RcppArmadillo
 Imports: 
+    ggplot2,
+    magrittr,
+    MASS,
+    nloptr,
+    plotly,
+    purrr,
     Rcpp,
+    Rfast,
+    stats,
+    tidyr,
+    vctrs,
     vegan
