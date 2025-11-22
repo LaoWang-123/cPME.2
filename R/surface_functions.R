@@ -176,6 +176,7 @@ generate_surface_data <- function(f,
 #' @param method method = c("pca","isomap")
 #'
 #' @returns initialization of d embedding
+#' @import vegan
 #' @export
 #'
 pme_initial_guess <- function(X, d, method = c("pca","isomap")) {

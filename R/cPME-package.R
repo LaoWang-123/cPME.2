@@ -1,5 +1,5 @@
 ## usethis namespace: start
-#' @useDynLib cPME, .registration = TRUE
+#' @useDynLib cPME.2, .registration = TRUE
 ## usethis namespace: end
 NULL
 
