@@ -52,7 +52,7 @@ make_dphi_fn <- function(basis, grad_f2k_fun, f2_fun, rotated = FALSE) {
 
     # Return a function of (u,v)
     function(u, v) {
-      (1 / norm_pq) * (-0.5 * lambda_pq * psi_fun(u, v) * f2_fun(u,v) + ( grad_f2k_fun(u,v) %*% grad_fun(u, v)))
+      (1 / norm_pq) * (t(-0.5 * lambda_pq * psi_fun(u, v) * f2_fun(u,v)) + ( grad_f2k_fun(u,v) %*% grad_fun(u, v)))
     }
 
   } else {
