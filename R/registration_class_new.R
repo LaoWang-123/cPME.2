@@ -168,11 +168,11 @@ Registration_new <- R6::R6Class("Registration",
       ####################################
       #### New edited part
       n=nrow(self$Ugrid)
-      slef$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
+      self$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
       self$f2_grid <- make_f2_grid(self$f2_k, self$Ugrid)
 
       # Compute initial energy E_0
-      E0 <- compute_E_grid(slef$f1_grid, self$f2_grid, self$Ugrid)
+      E0 <- compute_E_grid(self$f1_grid, self$f2_grid, self$Ugrid)
 
       self$grad_f2_grid <- make_grad_f2_grid(self$grad_f2k_fun, self$Ugrid)
 
