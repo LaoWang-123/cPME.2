@@ -151,3 +151,36 @@ compute_E_grid <- function(f1_grid, f2_grid) {
   E_val <- mean(diff_sq)
   return(E_val)
 }
+
+
+################################################################
+### Change the method to composite gamma_k
+##############################################################
+# delta_gamma_fns: list of all δγ^{(0)}, …, δγ^{(k-1)}
+#' Composite gamma from delta_gamma history
+#'
+#' @param delta_gamma_fns a list from all delta gamma fns from state_list
+#' @param eps default value=0.007
+#'
+#' @returns gamma^k function, (u,v) input (u,v) out
+#' @export
+#'
+#' @examples
+#' delta_gamma_fns <- lapply(state_list, function(s) s$delta_gamma_fn)
+#' gamma_next.2 <- make_gamma_from_history(delta_gamma_fns = delta_gamma_fns,eps = 0.007)
+#' f2_next.2 <- function(u, v) {
+#' xy <- gamma_next.2(u, v)
+#' self$f2(xy[1], xy[2])
+#' }
+make_gamma_from_history <- function(delta_gamma_fns, eps) {
+  function(u, v) {
+    x <- u
+    y <- v
+    for (g in rev(delta_gamma_fns)) {
+      dxy <- g(x, y)
+      x <- x + eps * dxy[1]
+      y <- y + eps * dxy[2]
+    }
+    c(x, y)
+  }
+}

@@ -155,24 +155,6 @@ Registration_new <- R6::R6Class("Registration",
       # gradient of f2^0 = Df2
       self$grad_f2k_fun <- self$f2_grad_fn
 
-
-      # # Compute initial energy E_0
-      # E0 <- compute_E_vectorized(self$f1, self$f2_k, self$Ugrid)
-      # # Build dphi basis for iteration 0
-      # dphi_set <- build_dphi_set(
-      #   basis_set     = self$basis_set,
-      #   grad_f2k_fun  = self$grad_f2k_fun,
-      #   f2_fun        = self$f2_k
-      # )
-      #
-      # # Compute coefficients α_i
-      # self$dgamma_coefs <- compute_inner_products(
-      #   f1        = self$f1,
-      #   f2_k      = self$f2_k,
-      #   dphi_list = dphi_set,
-      #   uv_grid   = self$Ugrid
-      # )
-
       ####################################
       #### New edited part
       self$f2_grid <- make_f2_grid(self$f2_k, self$Ugrid)
@@ -231,11 +213,9 @@ Registration_new <- R6::R6Class("Registration",
       eps <- self$eps_step
 
       # --- 2) Update γ^{k+1} = γ_k ∘ (id + eps * δγ_k) ---
-      gamma_next <- update_gamma_fn(
-        gamma_k       = self$gamma_k,
-        delta_gamma_k = self$delta_gamma_fn,
-        epsilon       = eps
-      )
+      ######### Newly edited on 11/23/2025
+      delta_gamma_fns <- lapply(self$state_list, function(s) s$delta_gamma_fn)
+      gamma_next <- make_gamma_from_history(delta_gamma_fns = delta_gamma_fns,eps = eps)
 
       # --- 3) Update f2^{k+1} = f2 ∘ γ^{k+1} ---
       f2_next <- function(u, v) {
@@ -244,7 +224,7 @@ Registration_new <- R6::R6Class("Registration",
       }
 
       ####################################
-      #### New edited part
+      #### Newly edited on 11/23/2025
       n=nrow(self$Ugrid)
       f2_next_grid <- make_f2_grid(f2_next, self$Ugrid)
 
@@ -274,22 +254,6 @@ Registration_new <- R6::R6Class("Registration",
         f2_grad_fn  = self$f2_grad_fn,
         epsilon     = eps
       )
-
-      # # --- Build new dϕ(b_i) ---
-      # dphi_set <- build_dphi_set(
-      #   basis_set     = self$basis_set,
-      #   grad_f2k_fun  = grad_f2k_fun,
-      #   f2_fun        = f2_next
-      # )
-      #
-      # # --- Compute new coefficients α_i ---
-      # dgamma_coefs <- compute_inner_products(
-      #   f1        = self$f1,
-      #   f2_k      = f2_next,
-      #   dphi_list = dphi_set,
-      #   uv_grid   = self$Ugrid
-      # )
-      #
 
       grad_f2_grid <- make_grad_f2_grid(grad_f2k_fun, self$Ugrid)
 
