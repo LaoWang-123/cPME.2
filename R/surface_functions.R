@@ -107,7 +107,22 @@ grad_f_bowl <- function(u, v, R = 1.0, c = 1.5) {
 # ==========================================================
 # Generate simulated surface data
 # ==========================================================
+#' Generate simulated surface data
+#'
+#' @param f surface function, (u,v) input and (x,y,z) output
+#' @param uv_grid a data.frame with u,v columns
+#' @param n_u default = 50
+#' @param n_v default = 50
+#' @param noise_sd default = 0
+#' @param seed default = NULL
+#'
+#' @returns a list of data to generate plots
+#' @export
+#'
+#' @examples
+#' data_f1 <- generate_surface_data(f1, n_u = 60, n_v = 60, noise_sd = 0, seed = 123) # R=1.2
 generate_surface_data <- function(f,
+                                  uv_grid,
                                   n_u = 50,
                                   n_v = 50,
                                   noise_sd = 0,
@@ -115,13 +130,15 @@ generate_surface_data <- function(f,
   # Optional reproducibility
   if (!is.null(seed)) set.seed(seed)
 
-  # Generate UV grid
-  u_seq <- seq(0, 1, length.out = n_u)
-  v_seq <- seq(0, 1, length.out = n_v)
-  UV_grid <- expand.grid(u = u_seq, v = v_seq)
+  if(is.null(uv_grid)){
+    # Generate UV grid
+    u_seq <- seq(0, 1, length.out = n_u)
+    v_seq <- seq(0, 1, length.out = n_v)
+    uv_grid <- expand.grid(u = u_seq, v = v_seq)
+  }
 
   # Evaluate surface function f(u, v)
-  xyz <- t(apply(UV_grid, 1, function(uv) {
+  xyz <- t(apply(uv_grid, 1, function(uv) {
     f(uv[1], uv[2])
   }))
   colnames(xyz) <- c("x", "y", "z")
@@ -133,9 +150,9 @@ generate_surface_data <- function(f,
 
   # Combine results into a list
   data_list <- list(
-    UV_grid = UV_grid,
+    UV_grid = uv_grid,
     XYZ = xyz,
-    n_points = nrow(UV_grid),
+    n_points = nrow(uv_grid),
     noise_sd = noise_sd
   )
 
