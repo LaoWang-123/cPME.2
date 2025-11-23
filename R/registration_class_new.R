@@ -22,7 +22,9 @@ Registration_new <- R6::R6Class("Registration",
                               #' @field f2_grad_fn Gradient of f2, a function returning (df/du, df/dv).
                               #' @field grad_f2_grid The output of f2_grad_fn function with uv-grid.
                               #' @field basis_set A list of basis functions used to build the tangent basis.
+                              #' @field basis_grid A list of basis functions' output with grid input.
                               #' @field Ugrid A data frame of (u, v) evaluation points on [0,1]^2.
+                              #' @field n the length of grid.
 
                               #' @field bi_set Precomputed basis functions b_i(u,v).
                               #' @field D_bi_set Precomputed gradients Db_i(u,v).
@@ -54,7 +56,9 @@ Registration_new <- R6::R6Class("Registration",
                               f2_grad_fn = NULL,
                               grad_f2_grid = NULL,
                               basis_set = NULL,
+                              basis_grid = NULL,
                               Ugrid = NULL,
+                              n = NULL,
 
                               bi_set = NULL,
                               D_bi_set = NULL,

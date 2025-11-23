@@ -37,7 +37,11 @@ It supports:
 
 \item{\code{basis_set}}{A list of basis functions used to build the tangent basis.}
 
+\item{\code{basis_grid}}{A list of basis functions' output with grid input.}
+
 \item{\code{Ugrid}}{A data frame of (u, v) evaluation points on [0,1]^2.}
+
+\item{\code{n}}{the length of grid.}
 
 \item{\code{bi_set}}{Precomputed basis functions b_i(u,v).}
 
