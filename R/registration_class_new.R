@@ -126,6 +126,11 @@ Registration_new <- R6::R6Class("Registration",
                                 self$bi_set   <- build_bi_set(basis_set)
                                 self$D_bi_set <- build_D_bi_set(basis_set)
 
+                                # Precompute grid elements
+                                self$n=nrow(self$Ugrid)
+                                self$basis_grid <- build_basis_grid(basis_set = self$basis_set,Ugrid = self$Ugrid)
+                                self$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
+
                                 # Initialize the algorithm state (k = 0)
                                 self$initialize_state()
                               },
@@ -142,7 +147,6 @@ Registration_new <- R6::R6Class("Registration",
       gamma_id <- function(u, v) c(u, v)
       self$gamma_k <- gamma_id
       self$f2_k    <- self$f2
-
 
       # gradient of f2^0 = Df2
       self$grad_f2k_fun <- self$f2_grad_fn
@@ -167,17 +171,15 @@ Registration_new <- R6::R6Class("Registration",
 
       ####################################
       #### New edited part
-      n=nrow(self$Ugrid)
-      self$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
       self$f2_grid <- make_f2_grid(self$f2_k, self$Ugrid)
 
       # Compute initial energy E_0
-      E0 <- compute_E_grid(self$f1_grid, self$f2_grid, self$Ugrid)
+      E0 <- compute_E_grid(self$f1_grid, self$f2_grid)
 
       self$grad_f2_grid <- make_grad_f2_grid(self$grad_f2k_fun, self$Ugrid)
 
       dphi_grid_list <- compute_dphi_grid(
-        basis_grid = self$basis_set,
+        basis_grid = self$basis_grid,
         f2_grid = self$f2_grid,
         grad_f2_grid = self$grad_f2_grid
       )
@@ -185,7 +187,7 @@ Registration_new <- R6::R6Class("Registration",
       self$dgamma_coefs <- compute_inner_products_fast(
         diff_grid = self$f1_grid-self$f2_grid,
         dphi_grid_list = dphi_grid_list,
-        weight = 1/n
+        weight = 1/self$n
       )
       ####################################
       ####################################
@@ -286,8 +288,9 @@ Registration_new <- R6::R6Class("Registration",
       #
 
       grad_f2_grid <- make_grad_f2_grid(grad_f2k_fun, self$Ugrid)
+
       dphi_grid_list <- compute_dphi_grid(
-        basis_grid = self$basis_set,
+        basis_grid = self$basis_grid,
         f2_grid = f2_next_grid,
         grad_f2_grid = grad_f2_grid
       )
@@ -295,7 +298,7 @@ Registration_new <- R6::R6Class("Registration",
       dgamma_coefs <- compute_inner_products_fast(
         diff_grid = self$f1_grid - f2_next_grid,
         dphi_grid_list = dphi_grid_list,
-        weight = 1/n
+        weight = 1/self$n
       )
       ####################################
       ####################################

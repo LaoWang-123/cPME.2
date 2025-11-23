@@ -104,7 +104,6 @@ compute_inner_products_fast <- function(diff_grid, dphi_grid_list, weight) {
 make_f2_grid <- function(f2_fun, Ugrid) {
   n <- nrow(Ugrid)
 
-  # 每个点调用 f2_fun(u,v)，返回长度 3 vector
   mat <- t(vapply(
     1:n,
     function(i) f2_fun(Ugrid[i,1], Ugrid[i,2]),
