@@ -1,14 +1,14 @@
 # ==========================================================
 # γ function factory —  "smooth" / "rotate" / "identity"
 # ==========================================================
-#' Ganna function factory
+#' Gamma function factory nx2 matrix input
 #'
 #' @param mode mode choice
 #' @param au default 0.3
 #' @param av default 0.25
-#' @param angle
+#' @param angle default 0.5*pi
 #'
-#' @returns a chosen gamma function
+#' @returns a chosen gamma function with input with nx2 matrix
 #' @export
 #'
 gamma_function_factory <- function(mode = c("smooth", "rotate", "identity"),
@@ -45,6 +45,64 @@ gamma_function_factory <- function(mode = c("smooth", "rotate", "identity"),
   attr(fun, "params") <- list(au = .au, av = .av, angle = .angle, mode = mode)
   return(fun)
 }
+
+#' Gamma function factory u,v input
+#'
+#' @param mode mode choice
+#' @param au default 0.3
+#' @param av default 0.25
+#' @param angle default 0.5*pi
+#'
+#' @returns a chosen gamma function with input with u,v
+#' @export
+#'
+gamma_function_factory_scalar <- function(
+    mode = c("smooth", "rotate", "identity"),
+    au = 0.3, av = 0.25, angle = 0.5*pi
+) {
+  mode <- match.arg(mode)
+  .au <- au; .av <- av; .angle <- angle
+  force(.au); force(.av); force(.angle)
+
+  if (mode == "smooth") {
+
+    fun <- function(u, v, au = .au, av = .av) {
+      bu <- u*(1-u)
+      bv <- v*(1-v)
+      du <- au * bu * sin(2*pi*v)
+      dv <- av * bv * sin(2*pi*u)
+      u2 <- pmin(pmax(u + du, 0), 1)
+      v2 <- pmin(pmax(v + dv, 0), 1)
+      c(u2, v2)
+    }
+
+  } else if (mode == "rotate") {
+
+    fun <- function(u, v, angle = .angle) {
+      uc <- u - 0.5
+      vc <- v - 0.5
+      cosA <- cos(angle); sinA <- sin(angle)
+      u2 <- cosA*uc - sinA*vc + 0.5
+      v2 <- sinA*uc + cosA*vc + 0.5
+      # clamp to [0,1]
+      u2 <- pmin(pmax(u2, 0), 1)
+      v2 <- pmin(pmax(v2, 0), 1)
+      c(u2, v2)
+    }
+
+  } else if (mode == "identity") {
+
+    fun <- function(u, v) {
+      c(u, v)
+    }
+
+  }
+
+  attr(fun, "params") <- list(au = .au, av = .av, angle = .angle, mode = mode)
+  return(fun)
+}
+
+
 
 # ==========================================================
 # bowl function
