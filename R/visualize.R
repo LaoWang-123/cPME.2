@@ -26,6 +26,7 @@ visualize_gamma_grid_static <- function(gamma_fun, n = 25) {
 #' @param arrow_color default "tomato"
 #' @param point_color default "grey40"
 #' @param warp_scale default = 1
+#' @param uv_grid default = NULL
 #'
 #' @import ggplot2
 #' @export
@@ -33,23 +34,24 @@ visualize_gamma_grid_static <- function(gamma_fun, n = 25) {
 visualize_gamma_scalar_input <- function(gamma_fun, n = 25,
                                          arrow_color = "tomato",
                                          point_color = "grey40",
-                                         warp_scale = 1) {
-  # 1. 构造参数网格
-  u_seq <- seq(0, 1, length.out = n)
-  v_seq <- seq(0, 1, length.out = n)
-  grid <- expand.grid(u = u_seq, v = v_seq)
+                                         warp_scale = 1,uv_grid=NULL) {
+  if(is.null(uv_grid)){
+    u_seq <- seq(0, 1, length.out = n)
+    v_seq <- seq(0, 1, length.out = n)
+    uv_grid <- expand.grid(u = u_seq, v = v_seq)
+  }
+
   
-  # 2. 对每个点单独调用 gamma_fun(u, v)
-  UV2 <- t(apply(grid, 1, function(uv) gamma_fun(uv[1], uv[2])))
+  # 2. input (u,v) to gamma_fun(u, v)
+  UV2 <- t(apply(uv_grid, 1, function(uv) gamma_fun(uv[1], uv[2])))
   UV2 <- as.data.frame(UV2)
   names(UV2) <- c("u2", "v2")
   
-  # 3. 合并并放大位移以便视觉展示（warp_scale）
-  df <- cbind(grid, UV2)
+  
+  df <- cbind(uv_grid, UV2)
   df$u2 <- df$u + (df$u2 - df$u) * warp_scale
   df$v2 <- df$v + (df$v2 - df$v) * warp_scale
   
-  # 4. 绘制
   p <- ggplot2::ggplot(df) +
     ggplot2::geom_segment(
       ggplot2::aes(x = u, y = v, xend = u2, yend = v2),
@@ -89,8 +91,8 @@ visualize_gamma_scalar_input <- function(gamma_fun, n = 25,
 #' @param title "Simulated Surfaces (f1 & f2)"
 #'
 #' @returns a plot
-#' @import plotly
-#' @import dplyr
+#' @importFrom plotly plot_ly add_markers layout
+#' @importFrom magrittr %>%
 #' @export
 #'
 #' @examples
@@ -123,21 +125,21 @@ plot_surface_pair <- function(data1, data2,
   
   # --- Plotly scatter3D for both surfaces ---
   p <- plot_ly() %>%
-    add_markers(
+    plotly::add_markers(
       data = df1,
       x = ~x, y = ~y, z = ~z,
       color = I(color1),
       marker = list(size = 3, opacity = opacity1),
       name = "Surface f1"
     ) %>%
-    add_markers(
+    plotly::add_markers(
       data = df2,
       x = ~x, y = ~y, z = ~z,
       color = I(color2),
       marker = list(size = 3, opacity = opacity2),
       name = "Surface f2"
     ) %>%
-    layout(
+    plotly::layout(
       title = title,
       scene = list(
         xaxis = list(title = "x"),

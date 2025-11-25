@@ -9,7 +9,8 @@ visualize_gamma_scalar_input(
   n = 25,
   arrow_color = "tomato",
   point_color = "grey40",
-  warp_scale = 1
+  warp_scale = 1,
+  uv_grid = NULL
 )
 }
 \arguments{
@@ -22,6 +23,8 @@ visualize_gamma_scalar_input(
 \item{point_color}{default "grey40"}
 
 \item{warp_scale}{default = 1}
+
+\item{uv_grid}{default = NULL}
 }
 \description{
 Plot the gamma function

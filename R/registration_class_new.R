@@ -315,16 +315,26 @@ Registration_new <- R6::R6Class("Registration",
 
         self$step()
 
-        # Auto-stop when converged
         if (length(self$E_history) >= 2) {
-          dE <- abs(
-            self$E_history[length(self$E_history)] -
-              self$E_history[length(self$E_history) - 1]
-          )
-          if (dE < self$eps_energy) {
+          E_new  <- self$E_history[length(self$E_history)]
+          E_prev <- self$E_history[length(self$E_history) - 1]
+
+          dE <- E_new - E_prev
+
+          # ---- Case 1: converge ----
+          if (abs(dE) < self$eps_energy) {
             message(sprintf(
-              "Stopped at iteration %d: |ΔE| < %.1e",
+              "Stopped at iteration %d: |ΔE| < %.1e (converged)",
               self$iter, self$eps_energy
+            ))
+            break
+          }
+
+          # ---- Case 2: Energy Upgrade ----
+          if (dE > 0) {
+            message(sprintf(
+              "Stopped at iteration %d: Energy increased (ΔE = %.4e)",
+              self$iter, dE
             ))
             break
           }
