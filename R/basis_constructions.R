@@ -1,53 +1,65 @@
-# ---------------------------
-# (6) Build all basis sets
-# ---------------------------
-#' Build all basis sets
+### basis_construction.R
+
+#' Build a Set of Basis Functions
 #'
-#' @param Pmax default 3
-#' @param Qmax default 3
+#' Constructs scalar, gradient, rotated gradient, and Jacobian basis
+#' functions on the tensor grid \eqn{0 \le p \le Pmax}, \eqn{0 \le q \le Qmax},
+#' respecting the index constraints defined in the basis object
+#' (e.g. Dirichlet requires \eqn{p,q \ge 1}).
 #'
-#' @returns a list of basis functions
-#' @export
+#' @param Pmax Maximum frequency index in the first dimension.
+#' @param Qmax Maximum frequency index in the second dimension.
+#' @param basis A basis object such as `fourier_basis`, `neumann_basis`,
+#'   or `dirichlet_basis`, containing scalar/grad/rot/Jacobian generators,
+#'   eigenvalue and norm functions, and minimally valid indices `p_min`, `q_min`.
+#'
+#' @return A named list of basis entries indexed by "p\_q".
 #'
 #' @examples
-#' basis_set <- build_basis_set(3,3)
-build_basis_set <- function(Pmax, Qmax) {
+#' Bf <- build_basis_set(5, 5, fourier_basis)
+#' Bd <- build_basis_set(5, 5, dirichlet_basis)
+#'
+#' @export
+build_basis_set <- function(Pmax, Qmax, basis)
+{
   basis_set <- list()
-  for (p in 0:Pmax) {
-    for (q in 0:Qmax) {
-      # skip the constant mode (p=0, q=0)
+
+  # Default to 0 if basis does not explicitly define p_min or q_min
+  p_min <- if (!is.null(basis$p_min)) basis$p_min else 0
+  q_min <- if (!is.null(basis$q_min)) basis$q_min else 0
+
+  for (p in p_min:Pmax) {
+    for (q in q_min:Qmax) {
+
+      # Skip constant mode for cosine (Fourier/Neumann)
+      # Dirichlet will never hit (0,0) because p_min=q_min=1
       if (p == 0 && q == 0) next
 
-      ### Calculate the norm ||\nambla psi_pq||_L2 = pi * cpq * \sqrt(p2+q2)
-      cpq <- if (p == 0 && q == 0) 1 else if (p == 0 || q == 0) sqrt(2) else 2
-      norm_pq <- pi * abs(cpq) * sqrt(p^2+q^2)
-
       key <- paste(p, q, sep = "_")
+
       basis_set[[key]] <- list(
-        psi   = scalar_basis_fn(p, q),
-        grad_psi  = grad_basis_fn(p, q),
-        rot_grad_psi   = rot_basis_fn(p, q),
-        Dgrad_psi = jacobian_grad_fn(p, q),
-        Drot_grad_psi  = jacobian_rot_fn(p, q),
-        norm_pq = norm_pq,
-        lambda_pq = 4*pi^2*(p^2+q^2)
+        psi   = basis$scalar(p, q),
+        grad_psi  = basis$grad(p, q),
+        rot_grad_psi   = basis$rot(p, q),
+        Dgrad_psi = basis$jac_g(p, q),
+        Drot_grad_psi  = basis$jac_r(p, q),
+        lambda_pq = basis$lambda(p, q),
+        norm_pq   = basis$norm(p, q)
       )
     }
   }
+
   return(basis_set)
 }
 
 
-
-
-
 # Returns a named list of functions;
 # Names are "p_q.grad" and "p_q.rot" (both included).
-#' Title
+#' build bi set from basis_set
 #'
 #' @param basis_set
 #'
-#' @returns a list of bi set (grad and normalized of scalar basis)
+#' @returns a list of bi, normailized of grad and grad rot basis functions
 #' @export
 #'
 #' @examples

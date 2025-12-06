@@ -2,7 +2,8 @@
 % Please edit documentation in R/Utils.R
 \name{assemble_D_delta_gamma_fn}
 \alias{assemble_D_delta_gamma_fn}
-\title{Title}
+\title{Assemble Dδγ^k from coefficients and D_b_i
+Dδγ^k will be used in assembling grad_f2k and used in assemble_grad_f2k_from_state function}
 \usage{
 assemble_D_delta_gamma_fn(dgamma_coefs, D_bi_set)
 }
@@ -15,7 +16,8 @@ assemble_D_delta_gamma_fn(dgamma_coefs, D_bi_set)
 a function (u,v) to 2x2 matrix
 }
 \description{
-Title
+Assemble Dδγ^k from coefficients and D_b_i
+Dδγ^k will be used in assembling grad_f2k and used in assemble_grad_f2k_from_state function
 }
 \examples{
 assemble_D_delta_gamma_fn(dgamma_coefs,D_bi_set)

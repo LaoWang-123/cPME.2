@@ -29,6 +29,15 @@ compute_E_vectorized <- function(f1, f2, Ugrid) {
 
 ##################################################
 # bi set function is stored in basis_functions.R
+#######################################################
+# Calculate dphi(b)
+# ---------------------------
+# Reference: Section 3.5, Eq. (11)-(12) in cPME paper
+# For each basis field b_i (either ∇ψ_i or *∇ψ_i), compute
+#   dphi^k(b_i) = 1 / ||∇ψ_i|| * (-0.5 * λ_i * ψ_i * f2^k + ∇f2^k · ∇ψ_i)      # non-rotated
+#   dphi^k(b_i) = 1 / ||∇ψ_i|| * (∇f2^k · *∇ψ_i)                              # rotated
+
+# We get ∇f2^k(u,v) from assemble_delta_f2k_from_state function defined previously
 
 #
 #' Factory that returns a callable dphi function
@@ -171,8 +180,8 @@ assemble_delta_gamma_fn <- function(dgamma_coefs, bi_set) {
 # (C) Assemble Dδγ^k from coefficients and D_b_i
 # ---------------------------
 #
-#' Title
-#'
+#' Assemble Dδγ^k from coefficients and D_b_i
+#' Dδγ^k will be used in assembling grad_f2k and used in assemble_grad_f2k_from_state function
 #' @param dgamma_coefs coefs
 #' @param D_bi_set D_bi sets
 #'
@@ -289,15 +298,6 @@ assemble_grad_f2k_from_state <- function(state_list, gamma_k, f2_grad_fn, epsilo
 
 
 
-#######################################################
-# Calculate dphi(b)
-# ---------------------------
-# Reference: Section 3.5, Eq. (11)-(12) in cPME paper
-# For each basis field b_i (either ∇ψ_i or *∇ψ_i), compute
-#   dphi^k(b_i) = 1 / ||∇ψ_i|| * (-0.5 * λ_i * ψ_i * f2^k + ∇f2^k · ∇ψ_i)      # non-rotated
-#   dphi^k(b_i) = 1 / ||∇ψ_i|| * (∇f2^k · *∇ψ_i)                              # rotated
-
-# We get ∇f2^k(u,v) from assemble_delta_f2k_from_state function defined previously
 
 
 

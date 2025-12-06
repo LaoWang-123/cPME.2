@@ -274,7 +274,7 @@ Registration_new <- R6::R6Class("Registration",
 
       # --- Assemble δγ and Dδγ ---
       delta_gamma_fn  <- assemble_delta_gamma_fn(dgamma_coefs, self$bi_set)
-      Ddelta_gamma_fn <- assemble_D_delta_gamma_fn(dgamma_coefs, self$D_bi_set)
+      Ddelta_gamma_fn <- assemble_D_delta_gamma_fn(dgamma_coefs, self$D_bi_set) #will be used in assemble_grad_f2k_from_state
 
       # --- Update internal state ---
       self$gamma_k        <- gamma_next
@@ -282,7 +282,7 @@ Registration_new <- R6::R6Class("Registration",
       self$grad_f2k_fun   <- grad_f2k_fun
       self$dgamma_coefs   <- dgamma_coefs
       self$delta_gamma_fn <- delta_gamma_fn
-      self$Ddelta_gamma_fn<- Ddelta_gamma_fn
+      self$Ddelta_gamma_fn<- Ddelta_gamma_fn #will be used in assemble_grad_f2k_from_state
 
       # --- Save iteration record (state_list) ---
       self$state_list[[self$iter + 1]] <- list(
