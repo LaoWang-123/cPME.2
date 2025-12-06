@@ -126,12 +126,9 @@ make_grad_f2_grid <- function(grad_f2_fun, Ugrid) {
     stop("grad_f2_fun must return a 3×2 matrix.")
   }
 
-  # 3. 将 list of 3×2 转成 3×2×n 数组
-  G_array <- simplify2array(G_list)
-  # 现在 G_array 的维度是：3 × 2 × n
 
-  # 4. 提取两列偏导
-  # G_array[,1,] 是 3 × n，转置后 n × 3
+  G_array <- simplify2array(G_list)
+
   Gx <- t(G_array[,1,])
   Gy <- t(G_array[,2,])
 

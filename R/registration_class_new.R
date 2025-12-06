@@ -249,7 +249,7 @@ Registration_new <- R6::R6Class("Registration",
 
       # --- 6) Compute ∇(f2 ∘ γ^{k+1}) using chain rule ---
       grad_f2k_fun <- assemble_grad_f2k_from_state(
-        state_list  = self$state_list,
+        state_list  = self$state_list, # use the self$Ddelta_gamma_fn
         gamma_k     = gamma_next,
         f2_grad_fn  = self$f2_grad_fn,
         epsilon     = eps
