@@ -20,7 +20,7 @@
 #' Bd <- build_basis_set(5, 5, dirichlet_basis)
 #'
 #' @export
-build_basis_set <- function(Pmax, Qmax, basis)
+build_basis_set <- function(Pmax, Qmax, basis=c("fourier_basis","neumann_basis","dirichlet_basis"))
 {
   basis_set <- list()
 

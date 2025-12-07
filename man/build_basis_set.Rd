@@ -4,7 +4,11 @@
 \alias{build_basis_set}
 \title{Build a Set of Basis Functions}
 \usage{
-build_basis_set(Pmax, Qmax, basis)
+build_basis_set(
+  Pmax,
+  Qmax,
+  basis = c("fourier_basis", "neumann_basis", "dirichlet_basis")
+)
 }
 \arguments{
 \item{Pmax}{Maximum frequency index in the first dimension.}
