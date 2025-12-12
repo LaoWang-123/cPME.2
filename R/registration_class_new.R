@@ -1,7 +1,7 @@
 
 
 #' Registration Class for cPME Algorithm
-#'
+#' The difference between registration_class_new and registration_class is whether to precompute grid elements
 #' This class implements the surface registration algorithm used in cPME.
 #' It supports:
 #' - building basis functions
