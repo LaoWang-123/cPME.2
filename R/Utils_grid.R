@@ -118,7 +118,7 @@ build_basis_grid <- function(basis_set, Ugrid, mode = c("full","div_free")) {
 compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid, mode = c("full", "div_free")) {
   # f2_grid: n × 3
   # grad_f2_grid: list(Gx = n×3, Gy = n×3), gradient of f2 for each coord
-
+  mode <- match.arg(mode)
   out <- list()
 
   for (key in names(basis_grid)) {

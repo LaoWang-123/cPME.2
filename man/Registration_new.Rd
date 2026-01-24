@@ -84,6 +84,8 @@ It supports:
 
 \item{\code{max_iter}}{Maximum number of iterations.}
 
+\item{\code{basis_mode}}{"full" or "div_free"}
+
 \item{\code{folder}}{Optional folder path for autosaving state.}
 }
 \if{html}{\out{</div>}}
@@ -117,6 +119,7 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
   eps_step = 0.05,
   eps_energy = 1e-05,
   max_iter = 100,
+  basis_mode = c("full", "div_free"),
   folder = NULL
 )}\if{html}{\out{</div>}}
 }
@@ -139,6 +142,8 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
 \item{\code{eps_energy}}{Numeric. Convergence threshold.}
 
 \item{\code{max_iter}}{Maximum number of iterations.}
+
+\item{\code{basis_mode}}{c("full", "div_free".}
 
 \item{\code{folder}}{Folder for autosave (optional).}
 }

@@ -44,6 +44,8 @@ Registration_new <- R6::R6Class("Registration",
                               #' @field eps_energy Convergence threshold on |E_k - E_{k-1}|.
                               #' @field max_iter Maximum number of iterations.
 
+                              #' @field basis_mode "full" or "div_free"
+
                               #' @field folder Optional folder path for autosaving state.
 
                               # ---------------------------------------------------------
@@ -81,6 +83,9 @@ Registration_new <- R6::R6Class("Registration",
                               eps_energy = NULL,
                               max_iter = NULL,
 
+                              # basis selection mode (divergence or not)
+                              basis_mode = NULL,
+
                               # Folder for autosave
                               folder = NULL,
 
@@ -100,6 +105,7 @@ Registration_new <- R6::R6Class("Registration",
                               #' @param eps_step Numeric. Step size for updates.
                               #' @param eps_energy Numeric. Convergence threshold.
                               #' @param max_iter Maximum number of iterations.
+                              #' @param basis_mode c("full", "div_free".
                               #' @param folder Folder for autosave (optional).
                               #' @return The initialized Registration object (invisibly).
                               #'
@@ -109,6 +115,7 @@ Registration_new <- R6::R6Class("Registration",
     eps_step = 0.05,
     eps_energy = 1e-5,
     max_iter = 100,
+    basis_mode = c("full", "div_free"),
     folder = NULL) {
                                 # =======================
                                 # INITIALIZATION MODE
@@ -126,13 +133,16 @@ Registration_new <- R6::R6Class("Registration",
                                 self$max_iter = max_iter
                                 self$folder = folder
 
+                                # NEW: save mode
+                                self$basis_mode <- basis_mode
+
                                 # Precompute basis fields
-                                self$bi_set   <- build_bi_set(basis_set) ## need to add mode parameter
-                                self$D_bi_set <- build_D_bi_set(basis_set) ## need to add mode parameter
+                                self$bi_set   <- build_bi_set(basis_set = self$basis_set, mode = self$basis_mode) ## need to add mode parameter
+                                self$D_bi_set <- build_D_bi_set(basis_set = self$basis_set, mode = self$basis_mode) ## need to add mode parameter
 
                                 # Precompute grid elements
                                 self$n=nrow(self$Ugrid)
-                                self$basis_grid <- build_basis_grid(basis_set = self$basis_set,Ugrid = self$Ugrid) ## need to add mode parameter
+                                self$basis_grid <- build_basis_grid(basis_set = self$basis_set, Ugrid = self$Ugrid, mode = self$basis_mode) ## need to add mode parameter
                                 self$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
 
                                 # Initialize the algorithm state (k = 0)
@@ -167,7 +177,8 @@ Registration_new <- R6::R6Class("Registration",
       dphi_grid_list <- compute_dphi_grid(  ## need to add mode parameter
         basis_grid = self$basis_grid,
         f2_grid = self$f2_grid,
-        grad_f2_grid = self$grad_f2_grid
+        grad_f2_grid = self$grad_f2_grid,
+        mode = self$basis_mode
       )
 
       self$dgamma_coefs <- compute_inner_products_fast(
@@ -229,7 +240,6 @@ Registration_new <- R6::R6Class("Registration",
       f2_next_grid <- make_f2_grid(f2_next, self$Ugrid)
 
       # --- 4) Compute new energy ---
-      # E_curr <- compute_E_vectorized(self$f1, f2_next, self$Ugrid)
       E_curr <- compute_E_grid(self$f1_grid, f2_next_grid)
 
       self$iter <- self$iter + 1
@@ -257,10 +267,11 @@ Registration_new <- R6::R6Class("Registration",
 
       grad_f2_grid <- make_grad_f2_grid(grad_f2k_fun, self$Ugrid)
 
-      dphi_grid_list <- compute_dphi_grid(
+      dphi_grid_list <- compute_dphi_grid(  ## need to add mode parameter
         basis_grid = self$basis_grid,
         f2_grid = f2_next_grid,
-        grad_f2_grid = grad_f2_grid
+        grad_f2_grid = grad_f2_grid,
+        mode = self$basis_mode
       )
 
       dgamma_coefs <- compute_inner_products_fast(
