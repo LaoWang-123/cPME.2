@@ -105,6 +105,16 @@ build_basis_grid <- function(basis_set, Ugrid, mode = c("full","div_free")) {
 
 
 
+#' Compute dphi based on grid points
+#'
+#' @param basis_grid a list of bi on grid points.
+#' @param f2_grid surface function on grid points.
+#' @param grad_f2_grid gradient of surface function on grid points.
+#' @param mode mode c("full","div_free")
+#'
+#' @returns out, used to input in compute_inner_products_fast
+#' @export
+#'
 compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid, mode = c("full", "div_free")) {
   # f2_grid: n × 3
   # grad_f2_grid: list(Gx = n×3, Gy = n×3), gradient of f2 for each coord
@@ -149,11 +159,21 @@ compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid, mode = c("full"
 }
 
 
+#' Compute the inner products based on grid points to get coefficients
+#'
+#' @param diff_grid Two surface function difference on grid points.
+#' @param dphi_grid_list The output of compute_dphi_grid.
+#' @param weight default 1/n.
+#'
+#' @returns a named vector of coefficients
+#' @export
+#'
 compute_inner_products_fast <- function(diff_grid, dphi_grid_list, weight) {
 
   vapply(dphi_grid_list, function(mat3) {
     sum(rowSums(diff_grid * mat3) * weight)
   }, numeric(1))
+
 }
 
 

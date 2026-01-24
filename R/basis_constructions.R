@@ -87,7 +87,7 @@ build_bi_set <- function(basis_set, mode = c("full", "div_free")) {
   names(grad_list) <- paste0(keys, ".grad")
 
   bi_list <- c(grad_list, rot_list)
-  bi_list
+  return(bi_list)
 }
 
 
@@ -126,6 +126,6 @@ build_D_bi_set <- function(basis_set, mode = c("full", "div_free")) {
   names(D_grad_list) <- paste0(keys, ".grad")
 
   D_bi_set <- c(D_grad_list, D_rot_list)
-  D_bi_set
+  return(D_bi_set)
 }
 

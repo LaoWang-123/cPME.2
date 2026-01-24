@@ -127,12 +127,12 @@ Registration_new <- R6::R6Class("Registration",
                                 self$folder = folder
 
                                 # Precompute basis fields
-                                self$bi_set   <- build_bi_set(basis_set)
-                                self$D_bi_set <- build_D_bi_set(basis_set)
+                                self$bi_set   <- build_bi_set(basis_set) ## need to add mode parameter
+                                self$D_bi_set <- build_D_bi_set(basis_set) ## need to add mode parameter
 
                                 # Precompute grid elements
                                 self$n=nrow(self$Ugrid)
-                                self$basis_grid <- build_basis_grid(basis_set = self$basis_set,Ugrid = self$Ugrid)
+                                self$basis_grid <- build_basis_grid(basis_set = self$basis_set,Ugrid = self$Ugrid) ## need to add mode parameter
                                 self$f1_grid <- make_f2_grid(self$f1, self$Ugrid)
 
                                 # Initialize the algorithm state (k = 0)
@@ -164,7 +164,7 @@ Registration_new <- R6::R6Class("Registration",
 
       self$grad_f2_grid <- make_grad_f2_grid(self$grad_f2k_fun, self$Ugrid)
 
-      dphi_grid_list <- compute_dphi_grid(
+      dphi_grid_list <- compute_dphi_grid(  ## need to add mode parameter
         basis_grid = self$basis_grid,
         f2_grid = self$f2_grid,
         grad_f2_grid = self$grad_f2_grid
