@@ -2,18 +2,20 @@
 % Please edit documentation in R/basis_constructions.R
 \name{build_D_bi_set}
 \alias{build_D_bi_set}
-\title{Title}
+\title{Build D_bi set from basis_set}
 \usage{
-build_D_bi_set(basis_set)
+build_D_bi_set(basis_set, mode = c("full", "div_free"))
 }
 \arguments{
-\item{basis_set}{}
+\item{basis_set}{A list of basis functions.}
+
+\item{mode}{c("full","div_free")}
 }
 \value{
 a list of D bi sets
 }
 \description{
-Title
+Build D_bi set from basis_set
 }
 \examples{
 D_bi_set <- build_D_bi_set(basis_set)

@@ -2,30 +2,27 @@
 
 ### We optimize some functions and workflow to accelerate the computation speed
 
-build_basis_grid <- function(basis_set, Ugrid) {
+#' Build basis with grid points
+#'
+#' @param basis_set A list of basis functions.
+#' @param Ugrid Data frame of (u,v) sample locations.
+#' @param mode c("full","div_free")
+#'
+#' @returns a list of bi, calculated on grid points.
+#' @export
+#'
+build_basis_grid <- function(basis_set, Ugrid, mode = c("full","div_free")) {
+  mode <- match.arg(mode)
   out <- list()
   n  <- nrow(Ugrid)
+  keys <- sort(names(basis_set))
 
-  for (key in names(basis_set)) {
+  for (key in keys) {
     bs <- basis_set[[key]]
 
-    # psi(u,v)
-    psi_vals <- vapply(
-      1:n,
-      function(i) bs$psi(Ugrid[i,1], Ugrid[i,2]),
-      numeric(1)
-    )
+    psi_vals <- vapply(1:n, function(i) bs$psi(Ugrid[i,1], Ugrid[i,2]), numeric(1))
 
-    # grad psi(u,v)
-    grad_vals <- t(vapply(
-      1:n,
-      function(i) bs$grad_psi(Ugrid[i,1], Ugrid[i,2]),
-      numeric(2)
-    ))
-    grad_psi_x <- grad_vals[,1]
-    grad_psi_y <- grad_vals[,2]
-
-    # rot grad psi(u,v)
+    # rot always needed if div_free
     rot_vals <- t(vapply(
       1:n,
       function(i) bs$rot_grad_psi(Ugrid[i,1], Ugrid[i,2]),
@@ -34,23 +31,81 @@ build_basis_grid <- function(basis_set, Ugrid) {
     rot_x <- rot_vals[,1]
     rot_y <- rot_vals[,2]
 
+    if (mode == "full") {
+      grad_vals <- t(vapply(
+        1:n,
+        function(i) bs$grad_psi(Ugrid[i,1], Ugrid[i,2]),
+        numeric(2)
+      ))
+      grad_psi_x <- grad_vals[,1]
+      grad_psi_y <- grad_vals[,2]
+    } else {
+      grad_psi_x <- NULL
+      grad_psi_y <- NULL
+    }
+
     out[[key]] <- list(
-      psi        = psi_vals,     # n
-      grad_psi_x = grad_psi_x,   # n
-      grad_psi_y = grad_psi_y,   # n
-      rot_x      = rot_x,        # n
-      rot_y      = rot_y,        # n
+      psi        = psi_vals,
+      grad_psi_x = grad_psi_x,
+      grad_psi_y = grad_psi_y,
+      rot_x      = rot_x,
+      rot_y      = rot_y,
       lambda     = bs$lambda_pq,
       norm       = bs$norm_pq
     )
   }
-
   out
 }
 
+# build_basis_grid <- function(basis_set, Ugrid) {
+#   out <- list()
+#   n  <- nrow(Ugrid)
+#
+#   for (key in names(basis_set)) {
+#     bs <- basis_set[[key]]
+#
+#     # psi(u,v)
+#     psi_vals <- vapply(
+#       1:n,
+#       function(i) bs$psi(Ugrid[i,1], Ugrid[i,2]),
+#       numeric(1)
+#     )
+#
+#     # grad psi(u,v)
+#     grad_vals <- t(vapply(
+#       1:n,
+#       function(i) bs$grad_psi(Ugrid[i,1], Ugrid[i,2]),
+#       numeric(2)
+#     ))
+#     grad_psi_x <- grad_vals[,1]
+#     grad_psi_y <- grad_vals[,2]
+#
+#     # rot grad psi(u,v)
+#     rot_vals <- t(vapply(
+#       1:n,
+#       function(i) bs$rot_grad_psi(Ugrid[i,1], Ugrid[i,2]),
+#       numeric(2)
+#     ))
+#     rot_x <- rot_vals[,1]
+#     rot_y <- rot_vals[,2]
+#
+#     out[[key]] <- list(
+#       psi        = psi_vals,     # n
+#       grad_psi_x = grad_psi_x,   # n
+#       grad_psi_y = grad_psi_y,   # n
+#       rot_x      = rot_x,        # n
+#       rot_y      = rot_y,        # n
+#       lambda     = bs$lambda_pq,
+#       norm       = bs$norm_pq
+#     )
+#   }
+#
+#   out
+# }
 
 
-compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid) {
+
+compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid, mode = c("full", "div_free")) {
   # f2_grid: n × 3
   # grad_f2_grid: list(Gx = n×3, Gy = n×3), gradient of f2 for each coord
 
@@ -67,15 +122,18 @@ compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid) {
     lam  <- bg$lambda
     norm <- bg$norm
 
-    ## ---- gradient-type (Eq. 11) ----
-    term1 <- (-0.5 * lam) * psi * f2_grid                 # n×3
-    term2 <- cbind(
-      gx * grad_f2_grid$Gx[,1] + gy * grad_f2_grid$Gy[,1],
-      gx * grad_f2_grid$Gx[,2] + gy * grad_f2_grid$Gy[,2],
-      gx * grad_f2_grid$Gx[,3] + gy * grad_f2_grid$Gy[,3]
-    )
+    if (mode == "full") {
+      ## ---- gradient-type (Eq. 11) ----
+      term1 <- (-0.5 * lam) * psi * f2_grid                 # n×3
+      term2 <- cbind(
+        gx * grad_f2_grid$Gx[,1] + gy * grad_f2_grid$Gy[,1],
+        gx * grad_f2_grid$Gx[,2] + gy * grad_f2_grid$Gy[,2],
+        gx * grad_f2_grid$Gx[,3] + gy * grad_f2_grid$Gy[,3]
+      )
 
-    dphi_grad <- (term1 + term2) / norm   # n×3
+      dphi_grad <- (term1 + term2) / norm   # n×3
+      out[[paste0(key,".grad")]] <- dphi_grad
+      }
 
     ## ---- rotated-type (Eq. 12) ----
     term_rot <- cbind(
@@ -85,8 +143,6 @@ compute_dphi_grid <- function(basis_grid, f2_grid, grad_f2_grid) {
     )
 
     dphi_rot <- term_rot / norm          # n×3
-
-    out[[paste0(key,".grad")]] <- dphi_grad
     out[[paste0(key,".rot")]]  <- dphi_rot
   }
   out

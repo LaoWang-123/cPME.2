@@ -2,18 +2,20 @@
 % Please edit documentation in R/basis_constructions.R
 \name{build_bi_set}
 \alias{build_bi_set}
-\title{build bi set from basis_set}
+\title{Build bi set from basis_set}
 \usage{
-build_bi_set(basis_set)
+build_bi_set(basis_set, mode = c("full", "div_free"))
 }
 \arguments{
-\item{basis_set}{}
+\item{basis_set}{A list of basis functions.}
+
+\item{mode}{c("full","div_free")}
 }
 \value{
 a list of bi, normailized of grad and grad rot basis functions
 }
 \description{
-build bi set from basis_set
+Build bi set from basis_set
 }
 \examples{
 bi_set <- build_bi_set(basis_set)

@@ -55,9 +55,11 @@ build_basis_set <- function(Pmax, Qmax, basis=c(fourier_basis,neumann_basis,diri
 
 # Returns a named list of functions;
 # Names are "p_q.grad" and "p_q.rot" (both included).
-#' build bi set from basis_set
+
+#' Build bi set from basis_set
 #'
-#' @param basis_set
+#' @param basis_set A list of basis functions.
+#' @param mode c("full","div_free")
 #'
 #' @returns a list of bi, normailized of grad and grad rot basis functions
 #' @export
@@ -92,9 +94,11 @@ build_bi_set <- function(basis_set, mode = c("full", "div_free")) {
 
 # Returns a named list of functions Dbi, (u,v) to 2x2 matrix
 # Names are "p_q.grad" and "p_q.rot" (both included).
-#' Title
+
+#' Build D_bi set from basis_set
 #'
-#' @param basis_set
+#' @param basis_set A list of basis functions.
+#' @param mode c("full","div_free")
 #'
 #' @returns a list of D bi sets
 #' @export
