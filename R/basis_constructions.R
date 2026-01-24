@@ -64,25 +64,30 @@ build_basis_set <- function(Pmax, Qmax, basis=c(fourier_basis,neumann_basis,diri
 #'
 #' @examples
 #' bi_set <- build_bi_set(basis_set)
-build_bi_set <- function(basis_set) {
+build_bi_set <- function(basis_set, mode = c("full", "div_free")) {
+  mode <- match.arg(mode)
   keys <- sort(names(basis_set))
-
-  grad_list <- lapply(keys, function(key) {
-    bs <- basis_set[[key]]
-    norm_pq <- bs$norm_pq
-    function(u, v) bs$grad_psi(u, v) / norm_pq
-  })
 
   rot_list <- lapply(keys, function(key) {
     bs <- basis_set[[key]]
     norm_pq <- bs$norm_pq
     function(u, v) bs$rot_grad_psi(u, v) / norm_pq
   })
+  names(rot_list) <- paste0(keys, ".rot")
+
+  if (mode == "div_free") return(rot_list)
+
+  grad_list <- lapply(keys, function(key) {
+    bs <- basis_set[[key]]
+    norm_pq <- bs$norm_pq
+    function(u, v) bs$grad_psi(u, v) / norm_pq
+  })
+  names(grad_list) <- paste0(keys, ".grad")
 
   bi_list <- c(grad_list, rot_list)
-  names(bi_list) <- c(paste0(keys, ".grad"), paste0(keys, ".rot"))
   bi_list
 }
+
 
 
 # Returns a named list of functions Dbi, (u,v) to 2x2 matrix
@@ -96,24 +101,27 @@ build_bi_set <- function(basis_set) {
 #'
 #' @examples
 #' D_bi_set <- build_D_bi_set(basis_set)
-build_D_bi_set <- function(basis_set) {
+build_D_bi_set <- function(basis_set, mode = c("full", "div_free")) {
+  mode <- match.arg(mode)
   keys <- sort(names(basis_set))
-
-  D_grad_list <- lapply(keys, function(key) {
-    bs <- basis_set[[key]]
-    norm_pq <- bs$norm_pq
-    function(u, v) bs$Dgrad_psi(u, v) / norm_pq
-  })
 
   D_rot_list <- lapply(keys, function(key) {
     bs <- basis_set[[key]]
     norm_pq <- bs$norm_pq
     function(u, v) bs$Drot_grad_psi(u, v) / norm_pq
   })
+  names(D_rot_list) <- paste0(keys, ".rot")
 
+  if (mode == "div_free") return(D_rot_list)
+
+  D_grad_list <- lapply(keys, function(key) {
+    bs <- basis_set[[key]]
+    norm_pq <- bs$norm_pq
+    function(u, v) bs$Dgrad_psi(u, v) / norm_pq
+  })
+  names(D_grad_list) <- paste0(keys, ".grad")
 
   D_bi_set <- c(D_grad_list, D_rot_list)
-  names(D_bi_set) <- c(paste0(keys, ".grad"), paste0(keys, ".rot"))
-
   D_bi_set
 }
+
