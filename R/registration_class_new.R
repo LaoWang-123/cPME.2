@@ -189,7 +189,6 @@ Registration_new <- R6::R6Class("Registration",
       ####################################
       ####################################
 
-
       # Assemble δγ and Dδγ
       self$delta_gamma_fn  <- assemble_delta_gamma_fn(self$dgamma_coefs, self$bi_set)
       self$Ddelta_gamma_fn <- assemble_D_delta_gamma_fn(self$dgamma_coefs, self$D_bi_set)
