@@ -2,6 +2,14 @@
 
 ### We optimize some functions and workflow to accelerate the computation speed
 
+#' Build basis with grid points
+#'
+#' @param basis_set A list of basis functions.
+#' @param Ugrid Data frame of (u,v) sample locations.
+#'
+#' @returns a list of bi, calculated on grid points.
+#' @export
+#'
 build_basis_grid <- function(basis_set, Ugrid) {
   out <- list()
   n  <- nrow(Ugrid)

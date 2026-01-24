@@ -4,10 +4,10 @@
 \alias{build_bi_set}
 \title{build bi set from basis_set}
 \usage{
-build_bi_set(basis_set)
+build_bi_set(basis_set, mode = c("full", "div_free"))
 }
 \arguments{
-\item{basis_set}{}
+\item{basis_set}{A list of basis functions.}
 }
 \value{
 a list of bi, normailized of grad and grad rot basis functions

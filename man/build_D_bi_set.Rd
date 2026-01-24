@@ -4,10 +4,10 @@
 \alias{build_D_bi_set}
 \title{Title}
 \usage{
-build_D_bi_set(basis_set)
+build_D_bi_set(basis_set, mode = c("full", "div_free"))
 }
 \arguments{
-\item{basis_set}{}
+\item{basis_set}{A list of basis functions.}
 }
 \value{
 a list of D bi sets

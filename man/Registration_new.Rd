@@ -3,16 +3,29 @@
 \docType{class}
 \name{Registration_new}
 \alias{Registration_new}
-\title{Registration Class for cPME Algorithm}
+\title{Registration Class for cPME Algorithm
+The difference between registration_class_new and registration_class is whether to precompute grid elements
+This class implements the surface registration algorithm used in cPME.
+It supports:
+- building basis functions
+- computing tangent updates
+- iterative optimization
+- saving state to RDS}
 \format{
 An \code{R6Class} generator object
 }
 \description{
 Registration Class for cPME Algorithm
+The difference between registration_class_new and registration_class is whether to precompute grid elements
+This class implements the surface registration algorithm used in cPME.
+It supports:
+- building basis functions
+- computing tangent updates
+- iterative optimization
+- saving state to RDS
 
 Registration Class for cPME Algorithm
-}
-\details{
+The difference between registration_class_new and registration_class is whether to precompute grid elements
 This class implements the surface registration algorithm used in cPME.
 It supports:
 - building basis functions

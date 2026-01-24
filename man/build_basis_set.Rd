@@ -7,7 +7,7 @@
 build_basis_set(
   Pmax,
   Qmax,
-  basis = c("fourier_basis", "neumann_basis", "dirichlet_basis")
+  basis = c(fourier_basis, neumann_basis, dirichlet_basis)
 )
 }
 \arguments{
