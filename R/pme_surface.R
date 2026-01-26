@@ -155,3 +155,9 @@ pme_grad_factory <- function(pme_result,A=diag(2),b=0) {
 }
 
 
+evaluate_embedding <- function(grid, f) {
+  pts <- t(apply(grid, 1, f))
+  pts <- matrix(pts, ncol = 3)
+  colnames(pts) <- c("x","y","z")
+  cbind(grid, pts)
+}
