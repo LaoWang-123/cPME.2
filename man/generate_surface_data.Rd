@@ -6,7 +6,7 @@
 \usage{
 generate_surface_data(
   f,
-  uv_grid,
+  uv_grid = NULL,
   n_u = 50,
   n_v = 50,
   noise_sd = 0,

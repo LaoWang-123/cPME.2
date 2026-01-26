@@ -297,8 +297,10 @@ is_pme <- function(x) {
 #'
 #' @return A list used to initialize PME.
 #'
-#' @noRd
-initialize_pme <- function(x, d, min_clusters, alpha, max_clusters, component_type = "centers", algorithm = "isomap", subsample_size = 5) {
+#' @export
+initialize_pme <- function(x, d, min_clusters, alpha, max_clusters,
+                           component_type = "centers", algorithm = "isomap",
+                           subsample_size = 5,rescale = TRUE) {
   est <- hdmde_mod(x, min_clusters, alpha, max_clusters)
   if (component_type == "subsample") {
     cluster_points <- matrix(nrow = 1, ncol = ncol(x))
@@ -343,49 +345,6 @@ initialize_pme <- function(x, d, min_clusters, alpha, max_clusters, component_ty
   X <- centers
   I <- nrow(centers)
 
-  # if (algorithm == "diffusion_maps") {
-  # init_parameterization <- dimRed::embed(
-  #   X,
-  #   "DiffusionMaps",
-  #   ndim = d,
-  #   .mute = c("message", "output")
-  # )
-  # } else if (algorithm == "hessian_eigenmaps") {
-  #   init_parameterization <- dimRed::embed(
-  #     X,
-  #     "HLLE",
-  #     knn = floor(sqrt(nrow(X))),
-  #     ndim = d
-  #     # .mute = c("message", "output")
-  #   )
-  # } else if (algorithm == "laplacian_eigenmaps") {
-  # init_parameterization <- dimRed::embed(
-  #   X,
-  #   "LaplacianEigenmaps",
-  #   knn = floor(sqrt(nrow(X))),
-  #   ndim = d,
-  #   .mute = c("message", "output")
-  # )
-  # } else if (algorithm == "lle") {
-  #   init_parameterization <- dimRed::embed(
-  #     X,
-  #     "LLE",
-  #     knn = floor(sqrt(nrow(X))),
-  #     ndim = d
-  #     # .mute = c("message", "output")
-  #   )
-  # } else {
-  # init_parameterization <- dimRed::embed(
-  #   X,
-  #   "Isomap",
-  #   knn = floor(sqrt(nrow(X))),
-  #   ndim = d,
-  #   .mute = c("message", "output")
-  # )
-  #   dissimilarity <- as.matrix(stats::dist(X))
-  #   init_parameterization <- vegan::isomap(dissimilarity, ndim = d, k = floor(sqrt(nrow(dissimilarity))))
-  # }
-
   dissimilarity <- as.matrix(stats::dist(X))
   init_parameterization <- vegan::isomap(
     dissimilarity,
@@ -393,14 +352,22 @@ initialize_pme <- function(x, d, min_clusters, alpha, max_clusters, component_ty
     k = floor(sqrt(nrow(dissimilarity)))
   )
 
-  # output <- dimRed::as.data.frame(init_parameterization) %>%
-  #   as.matrix()
 
   output <- init_parameterization$points |>
     as.matrix()
 
+  U <- matrix(output[, 1:d], nrow = nrow(X))
+
+  if (isTRUE(rescale)) {
+    if (d != 2) {
+      stop("rescale=TRUE currently only supports d = 2, since scale_uniform_square_with_params() expects 2D U.")
+    }
+    U <- scale_uniform_square_with_params(U)$U_scaled
+  }
+
+
   list(
-    parameterization = matrix(output[, 1:d], nrow = nrow(X)),
+    parameterization = U,
     theta_hat = theta_hat,
     centers = centers,
     sigma = sigma,
@@ -428,7 +395,7 @@ calc_coefficients <- function(X, t, weights, w) {
 #'
 #' @param f Embedding map.
 #' @param X Numeric matrix of high-dimensional data.
-#' @param t Numeric matrix of initial low-dimensional parameterizations.
+#' @param init_params Numeric matrix of initial low-dimensional parameterizations.
 #'
 #' @return A numeric matrix of parameterizations.
 #'
