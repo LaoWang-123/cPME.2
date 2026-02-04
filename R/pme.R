@@ -7,6 +7,7 @@
 #' @param initialization A list of values providing an initialization for `pme()`. It is not recommended to supply these values manually.
 #' @param initialization_algorithm The name of a manifold learning algorithm to use for finding the initial parameterizations. Options include "isomap", "diffusion_maps", and "laplacian_eigenmaps".
 #' @param initialization_type Choose whether to use cluster centers or represent clusters by subsampling from the associated points. Options: "centers" or "subsample".
+#' @param initialization_rescale default = TRUE, to rescale init domain to [0,1]^2
 #' @param lambda A vector of smoothing values to be considered.
 #' @param alpha The significant level to be used when testing the need for additional clusters in data reduction.
 #' @param min_clusters The minimum number of clusters allowed in data reduction.
@@ -25,6 +26,7 @@ pme <- function(
     initialization = NULL,
     initialization_algorithm = "isomap",
     initialization_type = "centers",
+    initialization_rescale = TRUE,
     lambda = exp(-15:5),
     alpha = 0.01,
     min_clusters = 0,
@@ -55,7 +57,8 @@ pme <- function(
         alpha,
         max_clusters,
         algorithm = initialization_algorithm,
-        component_type = "subsample"
+        component_type = "subsample",
+        rescale = initialization_rescale
       )
     } else {
       initialization <- initialize_pme(
@@ -64,7 +67,8 @@ pme <- function(
         min_clusters,
         alpha,
         max_clusters,
-        algorithm = initialization_algorithm
+        algorithm = initialization_algorithm,
+        rescale = initialization_rescale
       )
     }
   }

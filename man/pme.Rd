@@ -10,6 +10,7 @@ pme(
   initialization = NULL,
   initialization_algorithm = "isomap",
   initialization_type = "centers",
+  initialization_rescale = TRUE,
   lambda = exp(-15:5),
   alpha = 0.01,
   min_clusters = 0,
@@ -31,6 +32,8 @@ pme(
 \item{initialization_algorithm}{The name of a manifold learning algorithm to use for finding the initial parameterizations. Options include "isomap", "diffusion_maps", and "laplacian_eigenmaps".}
 
 \item{initialization_type}{Choose whether to use cluster centers or represent clusters by subsampling from the associated points. Options: "centers" or "subsample".}
+
+\item{initialization_rescale}{default = TRUE, to rescale init domain to [0,1]^2}
 
 \item{lambda}{A vector of smoothing values to be considered.}
 
