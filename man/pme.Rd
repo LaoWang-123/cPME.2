@@ -10,7 +10,7 @@ pme(
   initialization = NULL,
   initialization_algorithm = "isomap",
   initialization_type = "centers",
-  initialization_rescale = TRUE,
+  initialization_rescale = FALSE,
   lambda = exp(-15:5),
   alpha = 0.01,
   min_clusters = 0,
