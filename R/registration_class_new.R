@@ -266,11 +266,11 @@ Registration_new <- R6::R6Class("Registration",
 
       grad_f2_grid <- make_grad_f2_grid(grad_f2k_fun, self$Ugrid)
 
-      dphi_grid_list <- compute_dphi_grid(  ## need to add mode parameter
+      dphi_grid_list <- compute_dphi_grid(
         basis_grid = self$basis_grid,
         f2_grid = f2_next_grid,
         grad_f2_grid = grad_f2_grid,
-        mode = self$basis_mode
+        mode = self$basis_mode  ## need to add mode option parameter
       )
 
       dgamma_coefs <- compute_inner_products_fast(

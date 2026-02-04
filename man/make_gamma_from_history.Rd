@@ -19,8 +19,8 @@ Composite gamma from delta_gamma history
 }
 \examples{
 delta_gamma_fns <- lapply(state_list, function(s) s$delta_gamma_fn)
-gamma_next.2 <- make_gamma_from_history(delta_gamma_fns = delta_gamma_fns,eps = 0.007)
-f2_next.2 <- function(u, v) {
+gamma_next <- make_gamma_from_history(delta_gamma_fns = delta_gamma_fns,eps = 0.007)
+f2_next <- function(u, v) {
 xy <- gamma_next.2(u, v)
 self$f2(xy[1], xy[2])
 }
