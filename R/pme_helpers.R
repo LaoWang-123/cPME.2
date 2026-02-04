@@ -168,7 +168,200 @@ projection_lpme <- function(x, f, initial_guess, n_knots, d_new, gamma) {
   }
 }
 
+#' Compute Spline Coefficients
+#'
+#' @param X Numeric matrix of high-dimensional data.
+#' @param t Numeric matrix of low-dimensional paramterizations.
+#' @param weights Numeric matrix of cluster weights.
+#' @param w smoothing parameter.
+#'
+#' @return A matrix of spline coefficients.
+#'
+#' @noRd
+calc_coefficients <- function(X, t, weights, w) {
+  t_val <- cbind(rep(1, nrow(t)), t)
+  E <- calcE(t, 4 - ncol(t))
+  solve_weighted_spline(E, weights, t_val, X, w, ncol(t), ncol(X))
+}
 
+#' Calculate a New Parameterization
+#'
+#' @param f Embedding map.
+#' @param X Numeric matrix of high-dimensional data.
+#' @param init_params Numeric matrix of initial low-dimensional parameterizations.
+#'
+#' @return A numeric matrix of parameterizations.
+#'
+#' @export
+calc_params <- function(f, X, init_params) {
+  params <- purrr::map(1:nrow(X), ~ projection_pme(X[.x, ], f, init_params[.x, ])) %>%
+    unlist() %>%
+    matrix(nrow = nrow(X), byrow = TRUE)
+  params
+}
+
+#' Calculate Sum of Squared Distances
+#'
+#' @param f Embedding map.
+#' @param X Numeric matrix of high-dimensional data.
+#' @param t Numeric matrix of low-dimensional paramterizations.
+#'
+#' @return A numeric value.
+#'
+#' @noRd
+calc_SSD <- function(f, X, t) {
+  SSD_val <- purrr::map(1:nrow(X), ~ dist_euclidean(X[.x, ], f(t[.x, ]))^2) %>%
+    unlist() %>%
+    sum()
+  SSD_val
+}
+
+#' Print the Results of a PME Iteration
+#'
+#' @param w The smoothing parameter.
+#' @param SSD_new The most recent SSD calculation.
+#' @param SSD_ratio The ratio of the new and old SSD values.
+#' @param count The iteration number.
+#'
+#' @noRd
+print_SSD <- function(tuning_val, SSD_new, SSD_ratio, count) {
+  print(
+    paste0(
+      "For tuning parameter ",
+      as.character(round(tuning_val, 4)),
+      ", iteration #",
+      as.character(count),
+      " gives SSD = ",
+      as.character(round(SSD_new, 4)),
+      " and SSD_ratio = ",
+      as.character(round(SSD_ratio, 4)),
+      "."
+    )
+  )
+}
+
+#' Plot a PME Object
+#'
+#' @param f A function of the embedding map.
+#' @param x A numeric matrix of the unreduced data.
+#' @param centers A numeric matrix of the mixture component centers.
+#' @param sol A numeric matrix of the embedding map coefficients.
+#' @param t A numeric matrix of the parameterization of the component centers.
+#' @param d The intrinsic dimension.
+#'
+#' @noRd
+plot_pme <- function(f, x, centers, sol, t, d) {
+  # pred_grid <- calc_tnew(centers, t, sol, I, d, lambda)
+  pred_grid <- calc_params(f, centers, t)
+  r_bounds <- Rfast::colMinsMaxs(pred_grid)
+  r_list <- list()
+  for (idx in 1:dim(r_bounds)[2]) {
+    r_list[[idx]] <- seq(
+      r_bounds[1, idx],
+      r_bounds[2, idx],
+      length.out = nrow(centers)
+    )
+  }
+  r_mat <- as.matrix(expand.grid(r_list))
+
+  pred_grid <- r_mat
+  f_pred <- purrr::map(
+    1:nrow(pred_grid),
+    ~ f(unlist(as.vector(pred_grid[.x, ]))) %>%
+      as.vector()
+  ) %>%
+    unlist() %>%
+    matrix(nrow = nrow(pred_grid), byrow = TRUE)
+
+  f_pred_full <- cbind(pred_grid, f_pred)
+
+  if (dim(x)[2] == 2) {
+    plt <- ggplot2::ggplot() +
+      ggplot2::geom_point(
+        ggplot2::aes(
+          x = x[, 1],
+          y = x[, 2]
+        ),
+        alpha = 0.5
+      ) +
+      ggplot2::geom_point(
+        ggplot2::aes(
+          x = f_pred_full[, d + 1],
+          y = f_pred_full[, d + 2]
+        ),
+        color = "red"
+      )
+    print(plt)
+  } else if (dim(x)[2] >= 3) {
+    plt <- plotly::plot_ly(
+      x = f_pred_full[, d + 1],
+      y = f_pred_full[, d + 2],
+      z = f_pred_full[, d + 3],
+      type = "scatter3d",
+      mode = "markers",
+      opacity = 0.5
+    ) %>%
+      plotly::add_markers(
+        x = x[, 1],
+        y = x[, 2],
+        z = x[, 3],
+        opacity = 0.15,
+        marker = list(size = 3)
+      )
+    print(plt)
+  }
+}
+
+#' Calculate Mean Squared Distance
+#'
+#' @param x A numeric matrix of data
+#' @param km A kmeans object describing reduced data.
+#' @param f An embedding map.
+#' @param t A numeric matrix of parameterizations for the mixture components
+#' described in `km`.
+#' @param D The dimension of the original dataset.
+#' @param d The intrinsic dimension.
+#'
+#' @return A numeric value.
+#'
+#' @noRd
+calc_msd <- function(x, km, f, t, D, d) {
+  data_initial <- matrix(0, nrow = 1, ncol = D + d)
+  center_order <- order(km$centers[, 1])
+  for (i in 1:max(km$cluster)) {
+    index_temp <- which(km$cluster == center_order[i])
+    length_temp <- length(index_temp)
+    temp_x <- matrix(x[index_temp, ], nrow = length_temp)
+    t_temp <- matrix(rep(t[i, 1], length_temp))
+    for (j in 1:d) {
+      t_temp <- cbind(t_temp, rep(t[i, j], length_temp))
+    }
+    t_temp <- matrix(t_temp[, -1], nrow = length_temp)
+    data_initial <- rbind(data_initial, cbind(temp_x, t_temp))
+  }
+  data_initial <- data_initial[-1, ]
+  proj_para <- purrr::map(
+    1:nrow(data_initial),
+    ~ projection_pme(data_initial[.x, 1:D], f, data_initial[.x, (D + 1):(D + d)]) %>%
+      t()
+  ) %>%
+    purrr::reduce(rbind)
+  proj_points <- purrr::map(
+    1:nrow(proj_para),
+    ~ f(proj_para[.x, ]) %>%
+      t()
+  ) %>%
+    purrr::reduce(rbind)
+
+  mse <- purrr::map(
+    1:nrow(data_initial),
+    ~ dist_euclidean(data_initial[.x, 1:D], proj_points[.x, ])^2
+  ) %>%
+    unlist() %>%
+    mean()
+
+  mse
+}
 ############# PME surface function
 #################################################################################################################
 ######################
@@ -217,22 +410,6 @@ pme_initial_guess <- function(X, d, method = c("pca","isomap")) {
   return(U0)
 }
 
-#####
-# We copied this from pme.R,  projection_pme can be used directly, which is exported by pme package
-#' Calculate a New Parameterization
-#'
-#' @param f Embedding map.
-#' @param X Numeric matrix of high-dimensional data.
-#' @param init_params Numeric matrix of initial low-dimensional parameterizations.
-#'
-#' @return A numeric matrix of parameterizations.
-#'
-calc_params <- function(f, X, init_params) {
-  params <- purrr::map(1:nrow(X), ~ projection_pme(X[.x, ], f, init_params[.x, ])) %>%
-    unlist() %>%
-    matrix(nrow = nrow(X), byrow = TRUE)
-  params
-}
 
 ########################################
 ######### function to scale the 2d parameters of pme projection
