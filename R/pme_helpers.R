@@ -480,6 +480,16 @@ evaluate_embedding <- function(grid, f) {
 
 ### Latest note on 2/4/2026, I decide to rescale the parameterization domain in the initialization step instead.
 
+#' Make a pme function with pme result and rescale matrix
+#'
+#' @param pme_result output from pme
+#' @param d default 2
+#' @param A a 2x2 matrix for scale
+#' @param b a 2x1 vector
+#'
+#' @returns a f(u,v) function
+#' @export
+#'
 pme_embedding_factory <- function(pme_result,d=2,A=diag(2),b=0){
   # etaFunc export from pme package
   f_embedding <- function(u,v) {
@@ -493,6 +503,15 @@ pme_embedding_factory <- function(pme_result,d=2,A=diag(2),b=0){
   return(f_embedding)
 }
 
+#' Get a grad function with pme and scale matrix
+#'
+#' @param pme_result output from pme
+#' @param A a 2x2 matrix for scale
+#' @param b a 2x1 vector
+#'
+#' @returns a g(u,v) function
+#' @export
+#'
 pme_grad_factory <- function(pme_result,A=diag(2),b=0) {
 
   parameterization <- pme_result$params_opt        # n × 2
