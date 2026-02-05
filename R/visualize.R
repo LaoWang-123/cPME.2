@@ -41,17 +41,17 @@ visualize_gamma_scalar_input <- function(gamma_fun, n = 25,
     uv_grid <- expand.grid(u = u_seq, v = v_seq)
   }
 
-  
+
   # 2. input (u,v) to gamma_fun(u, v)
   UV2 <- t(apply(uv_grid, 1, function(uv) gamma_fun(uv[1], uv[2])))
   UV2 <- as.data.frame(UV2)
   names(UV2) <- c("u2", "v2")
-  
-  
+
+
   df <- cbind(uv_grid, UV2)
   df$u2 <- df$u + (df$u2 - df$u) * warp_scale
   df$v2 <- df$v + (df$v2 - df$v) * warp_scale
-  
+
   p <- ggplot2::ggplot(df) +
     ggplot2::geom_segment(
       ggplot2::aes(x = u, y = v, xend = u2, yend = v2),
@@ -68,7 +68,7 @@ visualize_gamma_scalar_input <- function(gamma_fun, n = 25,
       title = "Gamma warp (single-point input)",
       x = "u", y = "v"
     )
-  
+
   return(p)
 }
 
@@ -106,15 +106,15 @@ plot_surface_pair <- function(data1, data2,
                               title = "Simulated Surfaces (f1 & f2)") {
 
   color_mode <- match.arg(color_mode)
-  
+
   # Extract components
   df1 <- cbind(data1$XYZ, data1$UV_grid)
   df2 <- cbind(data2$XYZ, data2$UV_grid)
-  
+
   # --- define color ---
   if (color_mode == "uv_hue") {
     color1 <- rgb(df1$u, df1$v, 1 - df1$u, maxColorValue = 1)
-    color2 <- rgb(df2$u, df2$v, 1 - df2$v, maxColorValue = 1)
+    color2 <- rgb(df2$u, df2$v, 1 - df2$u, maxColorValue = 1)
   } else if (color_mode == "u") {
     color1 <- df1$u
     color2 <- df2$u
@@ -122,7 +122,7 @@ plot_surface_pair <- function(data1, data2,
     color1 <- df1$v
     color2 <- df2$v
   }
-  
+
   # --- Plotly scatter3D for both surfaces ---
   p <- plot_ly() %>%
     plotly::add_markers(
@@ -149,7 +149,7 @@ plot_surface_pair <- function(data1, data2,
       ),
       legend = list(bgcolor = "rgba(255,255,255,0.6)")
     )
-  
+
   return(p)
 }
 
@@ -172,9 +172,9 @@ plotly_pointcloud <- function(df) {
 
 
 plot_pointcloud_pair <- function(X_original, df_embed,title=NULL) {
-  
+
   fig <- plot_ly()
-  
+
   # 1. original points
   fig <- fig %>%
     add_markers(
@@ -183,19 +183,19 @@ plot_pointcloud_pair <- function(X_original, df_embed,title=NULL) {
       marker = list(size = 3, color = "red"),
       name = "Original Data"
     )
-  
-  # 2. PME embedding 
+
+  # 2. PME embedding
   fig <- fig %>%
     add_markers(
       x = df_embed$x, y = df_embed$y, z = df_embed$z,
       marker = list(
         size = 2,
-        color = df_embed$u,           
+        color = df_embed$u,
         colorscale = "Viridis"
       ),
       name = "PME Embedding"
     )
-  
+
   fig %>% layout(
     scene = list(
       xaxis = list(title = "X"),
