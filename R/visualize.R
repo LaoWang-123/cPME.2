@@ -153,10 +153,6 @@ plot_surface_pair <- function(data1, data2,
   return(p)
 }
 
-# ---------------- Example ----------------
-# data_f1 <- generate_surface_data(f1, 60, 60, noise_sd = 0.01)
-# data_f2 <- generate_surface_data(f2, 60, 60)
-# plot_surface_pair(data_f1, data_f2)
 
 
 plotly_pointcloud <- function(df) {
