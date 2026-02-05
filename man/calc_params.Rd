@@ -4,7 +4,7 @@
 \alias{calc_params}
 \title{Calculate a New Parameterization}
 \usage{
-calc_params(f, X, init_params)
+calc_params(f, X, init_params, f_input = c("vector", "uv"))
 }
 \arguments{
 \item{f}{Embedding map.}
@@ -12,6 +12,8 @@ calc_params(f, X, init_params)
 \item{X}{Numeric matrix of high-dimensional data.}
 
 \item{init_params}{Numeric matrix of initial low-dimensional parameterizations.}
+
+\item{f_input}{default c("vector", "uv"), when chose "uv", it will divide the input into u and v.}
 }
 \value{
 A numeric matrix of parameterizations.
