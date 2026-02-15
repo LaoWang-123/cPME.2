@@ -13,6 +13,8 @@
 #' - pme_embedding_factory(), pme_grad_factory()
 #' - Registration_new R6 class
 #'
+#' @docType class
+#' @format An \code{R6Class} generator object
 #' @export
 PMERegistrationCycle <- R6::R6Class(
   classname = "PMERegistrationCycle",
