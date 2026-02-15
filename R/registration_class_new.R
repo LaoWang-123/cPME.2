@@ -47,6 +47,7 @@ Registration_new <- R6::R6Class("Registration",
                               #' @field basis_mode "full" or "div_free"
 
                               #' @field folder Optional folder path for autosaving state.
+                              #' @field filename default "reg_state.rds"
 
                               # ---------------------------------------------------------
                               # Fields (User-provided functions and algorithm settings)
@@ -88,6 +89,7 @@ Registration_new <- R6::R6Class("Registration",
 
                               # Folder for autosave
                               folder = NULL,
+                              filename = "reg_state.rds",
 
 
                               # ---------------------------------------------------------
@@ -116,7 +118,8 @@ Registration_new <- R6::R6Class("Registration",
     eps_energy = 1e-5,
     max_iter = 100,
     basis_mode = c("full", "div_free"),
-    folder = NULL) {
+    folder = NULL,
+    filename = "reg_state.rds") {
                                 # =======================
                                 # INITIALIZATION MODE
                                 # =======================
@@ -132,6 +135,7 @@ Registration_new <- R6::R6Class("Registration",
                                 self$eps_energy = eps_energy
                                 self$max_iter = max_iter
                                 self$folder = folder
+                                self$filename = filename
 
                                 # NEW: save mode
                                 self$basis_mode <- basis_mode
@@ -307,7 +311,7 @@ Registration_new <- R6::R6Class("Registration",
 
       # --- Autosave to folder ---
       if (!is.null(self$folder)) {
-        self$save_state()
+        self$save_state(filename = self$filename)
       }
 
       invisible(E_curr)
@@ -415,11 +419,11 @@ Registration_new <- R6::R6Class("Registration",
     # ---------------------------------------------------------
     #' @description Save the full registration object into an RDS file.
     #' @return Nothing. Writes `reg_state.rds` to `self$folder`.
-    save_state = function() {
+    save_state = function(filename="reg_state.rds") {
       if (!dir.exists(self$folder)) {
         dir.create(self$folder, recursive = TRUE)
       }
-      saveRDS(self, file.path(self$folder, "reg_state.rds"))
+      saveRDS(self, file.path(self$folder, filename))
     }
 
                             ) # end public list

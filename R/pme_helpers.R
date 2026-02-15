@@ -189,7 +189,7 @@ calc_coefficients <- function(X, t, weights, w) {
 #' @param f Embedding map.
 #' @param X Numeric matrix of high-dimensional data.
 #' @param init_params Numeric matrix of initial low-dimensional parameterizations.
-#' @param f_input default c("vector", "uv"), when chose "uv", it will divide the input into u and v.
+#' @param f_input default c("vector", "uv"), when chose "uv", it will divide the input into u and v. PME uses vector input but reg class use "uv" input function.
 #' @return A numeric matrix of parameterizations.
 #'
 #' @export
