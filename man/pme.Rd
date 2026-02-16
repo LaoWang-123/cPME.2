@@ -33,7 +33,7 @@ pme(
 
 \item{initialization_type}{Choose whether to use cluster centers or represent clusters by subsampling from the associated points. Options: "centers" or "subsample".}
 
-\item{initialization_rescale}{default = TRUE, to rescale init domain to [0,1]^2}
+\item{initialization_rescale}{default = FALSE, to rescale init domain to [0,1]^2}
 
 \item{lambda}{A vector of smoothing values to be considered.}
 

@@ -13,7 +13,7 @@ calc_params(f, X, init_params, f_input = c("vector", "uv"))
 
 \item{init_params}{Numeric matrix of initial low-dimensional parameterizations.}
 
-\item{f_input}{default c("vector", "uv"), when chose "uv", it will divide the input into u and v.}
+\item{f_input}{default c("vector", "uv"), when chose "uv", it will divide the input into u and v. PME uses vector input but reg class use "uv" input function.}
 }
 \value{
 A numeric matrix of parameterizations.

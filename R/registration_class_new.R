@@ -109,6 +109,7 @@ Registration_new <- R6::R6Class("Registration",
                               #' @param max_iter Maximum number of iterations.
                               #' @param basis_mode c("full", "div_free".
                               #' @param folder Folder for autosave (optional).
+                              #' @param filename filename for autosave, default "reg_state.rds"
                               #' @return The initialized Registration object (invisibly).
                               #'
                               initialize = function(
@@ -418,6 +419,7 @@ Registration_new <- R6::R6Class("Registration",
     # Save state to folder as RDS file
     # ---------------------------------------------------------
     #' @description Save the full registration object into an RDS file.
+    #' @param filename filename for autosave, default "reg_state.rds".
     #' @return Nothing. Writes `reg_state.rds` to `self$folder`.
     save_state = function(filename="reg_state.rds") {
       if (!dir.exists(self$folder)) {

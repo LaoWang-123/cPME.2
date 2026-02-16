@@ -9,10 +9,10 @@ An \code{R6Class} generator object
 }
 \description{
 This R6 class orchestrates:
-1) Fit PME for data1 and data2
+1) Fit PME for data1 and data2 (f1 fixed; f2 updated)
 2) Rescale both parameterizations to [0,1]^d
 3) Run registration to warp f2 toward f1
-4) Update f2 initialization (parameterization of centers) using final warped embedding f2_k
+4) Update cached f2 initialization (parameterization of centers) using final warped embedding f2_k
 5) Refit PME for data2, repeat
 }
 \details{
@@ -21,6 +21,119 @@ Requirements (already in your package):
 - calc_params(), scale_uniform_square_with_params()
 - pme_embedding_factory(), pme_grad_factory()
 - Registration_new R6 class
+
+
+If PME models have not yet been fitted, \code{fit_initial()}
+is called automatically. The object fields \code{converged}
+and \code{stop_reason} are updated if early stopping occurs.
+}
+\examples{
+
+## ------------------------------------------------
+## Method `PMERegistrationCycle$new`
+## ------------------------------------------------
+
+\dontrun{
+obj <- PME_Registration_Cycle$new(
+  data1 = X1,
+  data2 = X2,
+  d = 2
+)
+}
+Fit Initial PME Models for Both Datasets
+
+Performs the initialization and fitting steps of PME for
+\code{data1} (fixed) and \code{data2} (moving).
+
+For each dataset, this method:
+\enumerate{
+  \item Calls the internal PME initialization routine,
+  \item Fits the PME model using the provided arguments,
+  \item Stores the fitted PME objects in \code{pme1} and \code{pme2}.
+}
+
+The initialization object for \code{data2} is cached in
+\code{initialization_f2} for reuse across registration cycles.
+
+After fitting, affine scaling information for \code{pme1}
+is computed and the corresponding embedding function
+\code{f1_fun} is constructed.
+
+The initial state is recorded in \code{init_history}.
+
+}
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{data1}}{Numeric matrix or array for the first dataset (fixed).}
+
+\item{\code{data2}}{Numeric matrix or array for the second dataset (moving).}
+
+\item{\code{d}}{Integer. Intrinsic dimension of the parameterization domain.}
+
+\item{\code{pme_args_f1}}{List of arguments passed to \code{pme()} when fitting the first dataset.}
+
+\item{\code{pme_args_f2}}{List of arguments passed to \code{pme()} when fitting the second dataset.}
+
+\item{\code{init_args_f1}}{List of arguments passed to \code{initialize_pme()} for the first dataset (executed once).}
+
+\item{\code{init_args_f2}}{List of arguments passed to \code{initialize_pme()} for the second dataset (executed once).}
+
+\item{\code{reg_args}}{List of arguments controlling the registration step.}
+
+\item{\code{lambda_policy_f2}}{Character. Strategy for selecting lambda in PME fitting of data2.
+One of \code{"reuse_prev"}, \code{"fixed"}, or \code{"retune"}.}
+
+\item{\code{fixed_lambda_f2}}{Numeric. Fixed lambda value used when
+\code{lambda_policy_f2 == "fixed"}.}
+
+\item{\code{cycle_idx}}{Integer. Current registration cycle index.}
+
+\item{\code{pme1}}{Fitted PME object for \code{data1}.}
+
+\item{\code{pme2}}{Fitted PME object for \code{data2}.}
+
+\item{\code{f1_fun}}{Function. Current embedding function associated with \code{pme1}.}
+
+\item{\code{f2_fun}}{Function. Current embedding function associated with \code{pme2}.}
+
+\item{\code{f2_grad}}{Function. Gradient function corresponding to \code{f2_fun}.}
+
+\item{\code{initialization_f1}}{List. Cached initialization object for PME fitting of \code{data1}.}
+
+\item{\code{initialization_f2}}{List. Cached initialization object for PME fitting of \code{data2}.
+The centers remain fixed while parameterization may be updated across cycles.}
+
+\item{\code{scale_f1}}{List. Affine scaling information mapping the parameterization
+of \code{pme1} to the unit domain.}
+
+\item{\code{scale_f2}}{List. Affine scaling information mapping the parameterization
+of \code{pme2} to the unit domain (updated each cycle).}
+
+\item{\code{reg}}{Registration object storing the current registration model.}
+
+\item{\code{gamma}}{Function or object representing the current reparameterization map.}
+
+\item{\code{f2_warped}}{Function. Warped embedding of \code{f2} under the current \code{gamma}.}
+
+\item{\code{converged}}{Logical. Indicates whether the alternating optimization has converged.}
+
+\item{\code{stop_reason}}{Character. Text description of the stopping condition.}
+
+\item{\code{history}}{List. Stores per-cycle state information.}
+
+\item{\code{init_history}}{List. Stores initialization-stage information.}
+
+\item{\code{save_dir}}{Character. Directory path for saving intermediate states.}
+
+\item{\code{filename}}{Character. File name for autosaving registration state.
+Initialize a PME Registration Cycle Object
+
+Constructs a new \code{PME_Registration_Cycle} object and sets up
+configuration, initialization parameters, and registration controls
+for the alternating PME–registration procedure.}
+}
+\if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -29,8 +142,6 @@ Requirements (already in your package):
 \item \href{#method-PMERegistrationCycle-fit_initial}{\code{PMERegistrationCycle$fit_initial()}}
 \item \href{#method-PMERegistrationCycle-run_cycle}{\code{PMERegistrationCycle$run_cycle()}}
 \item \href{#method-PMERegistrationCycle-run}{\code{PMERegistrationCycle$run()}}
-\item \href{#method-PMERegistrationCycle-get_current}{\code{PMERegistrationCycle$get_current()}}
-\item \href{#method-PMERegistrationCycle-get_history}{\code{PMERegistrationCycle$get_history()}}
 \item \href{#method-PMERegistrationCycle-clone}{\code{PMERegistrationCycle$clone()}}
 }
 }
@@ -45,11 +156,89 @@ Requirements (already in your package):
   d = 2,
   pme_args_f1 = list(),
   pme_args_f2 = list(),
+  init_args_f1 = list(),
   init_args_f2 = list(),
   reg_args = list(),
   lambda_policy_f2 = c("reuse_prev", "fixed", "retune"),
-  fixed_lambda_f2 = NULL
+  fixed_lambda_f2 = NULL,
+  default_args = NULL,
+  save_dir = NULL,
+  filename = NULL
 )}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{data1}}{Numeric matrix or array representing the first dataset (fixed).}
+
+\item{\code{data2}}{Numeric matrix or array representing the second dataset (moving).}
+
+\item{\code{d}}{Integer. Intrinsic dimension of the parameterization domain.}
+
+\item{\code{pme_args_f1}}{List of arguments passed to \code{pme()} when fitting \code{data1}.}
+
+\item{\code{pme_args_f2}}{List of arguments passed to \code{pme()} when fitting \code{data2}.}
+
+\item{\code{init_args_f1}}{List of arguments passed to \code{initialize_pme()} for \code{data1}.}
+
+\item{\code{init_args_f2}}{List of arguments passed to \code{initialize_pme()} for \code{data2}.}
+
+\item{\code{reg_args}}{List of arguments controlling the registration step.}
+
+\item{\code{lambda_policy_f2}}{Character string specifying the lambda selection
+strategy for PME fitting of \code{data2}. One of
+\code{"reuse_prev"}, \code{"fixed"}, or \code{"retune"}.}
+
+\item{\code{fixed_lambda_f2}}{Numeric value used when
+\code{lambda_policy_f2 = "fixed"}.}
+
+\item{\code{default_args}}{Optional list of default arguments applied to PME fitting.}
+
+\item{\code{save_dir}}{Optional character string specifying a directory for
+autosaving intermediate states.}
+
+\item{\code{filename}}{Optional character string specifying the filename used
+when saving registration state.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+A new \code{PME_Registration_Cycle} R6 object.
+}
+\subsection{Examples}{
+\if{html}{\out{<div class="r example copy">}}
+\preformatted{\dontrun{
+obj <- PME_Registration_Cycle$new(
+  data1 = X1,
+  data2 = X2,
+  d = 2
+)
+}
+Fit Initial PME Models for Both Datasets
+
+Performs the initialization and fitting steps of PME for
+\code{data1} (fixed) and \code{data2} (moving).
+
+For each dataset, this method:
+\enumerate{
+  \item Calls the internal PME initialization routine,
+  \item Fits the PME model using the provided arguments,
+  \item Stores the fitted PME objects in \code{pme1} and \code{pme2}.
+}
+
+The initialization object for \code{data2} is cached in
+\code{initialization_f2} for reuse across registration cycles.
+
+After fitting, affine scaling information for \code{pme1}
+is computed and the corresponding embedding function
+\code{f1_fun} is constructed.
+
+The initial state is recorded in \code{init_history}.
+
+}
+\if{html}{\out{</div>}}
+
 }
 
 }
@@ -61,6 +250,28 @@ Requirements (already in your package):
 \if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$fit_initial()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+The updated \code{PME_Registration_Cycle} object (invisibly).
+Run One Alternating Registration Cycle
+register + update cached f2 init + refit f2
+Executes a single iteration of the alternating
+PME–registration procedure.
+
+If initial PME models have not yet been fitted,
+this method automatically calls \code{fit_initial()}.
+
+A cycle consists of:
+\enumerate{
+  \item Performing registration between the current embeddings,
+  \item Updating the cached initialization of \code{data2}
+        according to the estimated reparameterization,
+  \item Refitting PME for \code{data2} using the updated initialization.
+}
+
+The cycle index \code{cycle_idx} is incremented and
+internal state variables (including \code{pme2}, \code{gamma},
+scaling information, and embedding functions) are updated.
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-PMERegistrationCycle-run_cycle"></a>}}
@@ -70,6 +281,28 @@ Requirements (already in your package):
 \if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$run_cycle(record_full = TRUE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{record_full}}{Logical. If \code{TRUE}, stores full per-cycle
+state information in \code{history}. If \code{FALSE}, stores a
+reduced record.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+The updated \code{PME_Registration_Cycle} object (invisibly).
+Executes multiple alternating PME–registration cycles.
+
+This method serves as the main driver of the registration
+algorithm. It optionally reinitializes the object state,
+performs initial PME fitting if necessary, and then iteratively
+calls \code{run_cycle()}.
+
+During each cycle, intermediate results may be saved to disk,
+and convergence can be checked based on a user-specified
+stopping rule.
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-PMERegistrationCycle-run"></a>}}
@@ -78,30 +311,44 @@ Requirements (already in your package):
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$run(
   n_cycles = 5,
+  save_dir = NULL,
+  filename = NULL,
   tol_E = NULL,
   stop_rule = c("none", "delta_E"),
-  record_full = TRUE
+  record_full = TRUE,
+  reinit = FALSE
 )}\if{html}{\out{</div>}}
 }
 
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-PMERegistrationCycle-get_current"></a>}}
-\if{latex}{\out{\hypertarget{method-PMERegistrationCycle-get_current}{}}}
-\subsection{Method \code{get_current()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$get_current()}\if{html}{\out{</div>}}
-}
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{n_cycles}}{Integer. Maximum number of alternating cycles.}
 
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-PMERegistrationCycle-get_history"></a>}}
-\if{latex}{\out{\hypertarget{method-PMERegistrationCycle-get_history}{}}}
-\subsection{Method \code{get_history()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$get_history(compact = TRUE)}\if{html}{\out{</div>}}
-}
+\item{\code{save_dir}}{Optional character string specifying a directory
+for saving intermediate states.}
 
+\item{\code{filename}}{Optional character string specifying the filename
+used when saving registration state.}
+
+\item{\code{tol_E}}{Optional numeric tolerance used when
+\code{stop_rule = "delta_E"}.}
+
+\item{\code{stop_rule}}{Character string specifying the stopping criterion.
+One of \code{"none"} (no early stopping) or
+\code{"delta_E"} (stop when energy change is below \code{tol_E}).}
+
+\item{\code{record_full}}{Logical. Passed to \code{run_cycle()} to control
+how much per-cycle information is stored.}
+
+\item{\code{reinit}}{Logical. If \code{TRUE}, resets the internal state
+and refits the initial PME models before running cycles.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+The updated \code{PME_Registration_Cycle} object (invisibly).
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-PMERegistrationCycle-clone"></a>}}

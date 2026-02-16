@@ -87,6 +87,8 @@ It supports:
 \item{\code{basis_mode}}{"full" or "div_free"}
 
 \item{\code{folder}}{Optional folder path for autosaving state.}
+
+\item{\code{filename}}{default "reg_state.rds"}
 }
 \if{html}{\out{</div>}}
 }
@@ -120,7 +122,8 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
   eps_energy = 1e-05,
   max_iter = 100,
   basis_mode = c("full", "div_free"),
-  folder = NULL
+  folder = NULL,
+  filename = "reg_state.rds"
 )}\if{html}{\out{</div>}}
 }
 
@@ -146,6 +149,8 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
 \item{\code{basis_mode}}{c("full", "div_free".}
 
 \item{\code{folder}}{Folder for autosave (optional).}
+
+\item{\code{filename}}{filename for autosave, default "reg_state.rds"}
 }
 \if{html}{\out{</div>}}
 }
@@ -237,9 +242,16 @@ Nothing. Continues modifying the registration state.
 \subsection{Method \code{save_state()}}{
 Save the full registration object into an RDS file.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Registration_new$save_state()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Registration_new$save_state(filename = "reg_state.rds")}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{filename}}{filename for autosave, default "reg_state.rds".}
+}
+\if{html}{\out{</div>}}
+}
 \subsection{Returns}{
 Nothing. Writes `reg_state.rds` to `self$folder`.
 }
