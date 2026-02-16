@@ -513,7 +513,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
             eps_energy = 0.005,
             max_iter = 10,
             basis_mode = "div_free" # We need to define basis and Ugrid manually
-          ),
+          )
 
         )
       },
