@@ -65,6 +65,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @field init_history List. Stores initialization-stage information.
       #' @field save_dir Character. Directory path for saving intermediate states.
       #' @field filename Character. File name for autosaving registration state.
+      #' @field verbose printing log.
 
       # -------------------------
       # Data / config
@@ -117,6 +118,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       init_history = NULL,
       save_dir = NULL,
       filename = NULL,
+      verbose = TRUE,
 
       # -------------------------
       # Constructor/Initialize
@@ -144,6 +146,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @param save_dir Optional character string specifying a directory for
       #' autosaving intermediate states.
       #' @param filename Optional character string specifying the filename used
+      #' @param verbose printing log
       #' when saving registration state.
       #'
       #' @return A new \code{PME_Registration_Cycle} R6 object.
@@ -169,7 +172,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       fixed_lambda_f2 = NULL,
       default_args = NULL,
       save_dir = NULL,
-      filename = NULL
+      filename = NULL,
+      verbose = TRUE
       ) {
         self$data1 <- data1
         self$data2 <- data2
@@ -213,10 +217,14 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$fixed_lambda_f2 <- fixed_lambda_f2
 
         self$cycle_idx <- 0L
-        self$history <- list()
+        self$history <- list(
+          initial = NULL,
+          cycles  = list()
+        )
 
         self$save_dir <- save_dir
         self$filename <- filename
+        self$verbose <- isTRUE(verbose)
 
         invisible(self)
       },
@@ -276,7 +284,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$scale_f1 <- private$.compute_projection_and_scale(self$pme1, self$data1)
         self$f1_fun <- private$.make_scaled_embedding(self$pme1, self$scale_f1, d = self$d)
 
-        self$init_history <- list(
+        # initial history
+        self$history$initial <- list(
           k = 0,
           stage = "init",
           pme1 = self$pme1,
@@ -423,6 +432,21 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       ) {
         stop_rule <- match.arg(stop_rule)
 
+        # print settings
+        if (self$verbose) {
+          ra <- private$.null_to_list(self$reg_args)
+
+          cat("========================================\n")
+          cat("PMERegistrationCycle START\n")
+          cat(sprintf("n_cycles   : %d\n", as.integer(n_cycles)))
+          cat(sprintf("d          : %d\n", as.integer(self$d)))
+          cat(sprintf("eps_step   : %s\n", as.character(ra$eps_step)))
+          cat(sprintf("eps_energy : %s\n", as.character(ra$eps_energy)))
+          cat(sprintf("max_iter   : %s\n", as.character(ra$max_iter)))
+          cat("========================================\n")
+          flush.console()
+        }
+
         # new save_dir and new filename
         if (!is.null(save_dir)) {
           self$save_dir <- save_dir
@@ -446,6 +470,10 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$stop_reason <- NULL
 
         for (i in seq_len(n_cycles)) {
+          # print cycle number
+          if (self$verbose) {
+            cat(sprintf("\n[PMEReg] cycle %d / %d\n", i, n_cycles))
+          }
           self$run_cycle(record_full = record_full)
 
           # save the result of our PME registration cycle
@@ -512,7 +540,12 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
             eps_step = 0.005,
             eps_energy = 0.005,
             max_iter = 10,
-            basis_mode = "div_free" # We need to define basis and Ugrid manually
+            basis_mode = "div_free",
+            basis_set = build_basis_set(5,5,basis = neumann_basis),
+            subset(expand.grid(
+              u = seq(0, 1, length.out = 60),
+              v = seq(0, 1, length.out = 60)),
+              (u - 0.5)^2 + (v - 0.5)^2 <= 0.5^2)# We need to define basis and Ugrid manually
           )
 
         )
@@ -530,7 +563,10 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$f2_warped <- NULL
         self$converged <- FALSE
         self$stop_reason <- NULL
-        self$history <- list()
+        self$history <- list(
+          initial = NULL,
+          cycles  = list()
+        )
         invisible(TRUE)
       },
 
@@ -597,15 +633,18 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       },
 
       .register_once = function(f1_fun, f2_fun, grad_f2_fun) {
-        reg <- do.call(
-          Registration_new$new,
-          c(private$.null_to_list(self$reg_args),
-            list(
+
+        args <- modifyList(
+          private$.null_to_list(self$reg_args),
+          list(
             f1 = f1_fun,
             f2 = f2_fun,
-            f2_grad_fn = grad_f2_fun)
-            )
+            f2_grad_fn = grad_f2_fun,
+            verbose = self$verbose
+          )
         )
+
+        reg <- do.call(Registration_new$new, args)
         reg$run()
         reg
       },
@@ -672,6 +711,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         entry <- list(
           k = k,
           lambda_f2 = lambda,
+          reg = reg,
           n_iter = if (!is.null(E_hist)) length(E_hist) else NA_integer_,
           final_E = final_E,
           scale_f1 = if (record_full) scale_f1 else NULL,
@@ -680,7 +720,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           pme2_after = if (record_full) new_pme2 else NULL
         )
 
-        self$history[[length(self$history) + 1L]] <- entry
+        # cycle history
+        self$history$cycles[[length(self$history$cycles) + 1L]] <- entry
         invisible(TRUE)
       },
 
@@ -688,7 +729,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       .save_history_overwrite = function(save_dir,filename) {
         if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
 
-        saveRDS(c(self$init_history,self$history), file = file.path(save_dir, filename))
+        saveRDS(self$history, file = file.path(save_dir, filename))
         invisible(TRUE)
       },
 
@@ -696,9 +737,9 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       # Convergence rules
       # -------------------------
       .check_convergence_delta_E = function(tol_E) {
-        if (length(self$history) < 2L) return(FALSE)
-        E1 <- self$history[[length(self$history)]]$final_E
-        E0 <- self$history[[length(self$history) - 1L]]$final_E
+        if (length(self$history$cycles) < 2L) return(FALSE)
+        E1 <- self$history$cycles[[length(self$history$cycles)]]$final_E
+        E0 <- self$history$cycles[[length(self$history$cycles) - 1L]]$final_E
         if (is.na(E1) || is.na(E0)) return(FALSE)
         abs(E1 - E0) < tol_E
       }

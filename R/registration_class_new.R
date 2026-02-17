@@ -48,6 +48,7 @@ Registration_new <- R6::R6Class("Registration",
 
                               #' @field folder Optional folder path for autosaving state.
                               #' @field filename default "reg_state.rds"
+                              #' @field verbose If TRUE, print per-iteration energy updates as the optimizer runs.
 
                               # ---------------------------------------------------------
                               # Fields (User-provided functions and algorithm settings)
@@ -90,6 +91,7 @@ Registration_new <- R6::R6Class("Registration",
                               # Folder for autosave
                               folder = NULL,
                               filename = "reg_state.rds",
+                              verbose = TRUE,
 
 
                               # ---------------------------------------------------------
@@ -110,6 +112,7 @@ Registration_new <- R6::R6Class("Registration",
                               #' @param basis_mode c("full", "div_free".
                               #' @param folder Folder for autosave (optional).
                               #' @param filename filename for autosave, default "reg_state.rds"
+                              #' @param verbose If TRUE, print per-iteration energy updates as the optimizer runs.
                               #' @return The initialized Registration object (invisibly).
                               #'
                               initialize = function(
@@ -120,7 +123,8 @@ Registration_new <- R6::R6Class("Registration",
     max_iter = 100,
     basis_mode = c("full", "div_free"),
     folder = NULL,
-    filename = "reg_state.rds") {
+    filename = "reg_state.rds",
+    verbose = TRUE) {
                                 # =======================
                                 # INITIALIZATION MODE
                                 # =======================
@@ -137,6 +141,7 @@ Registration_new <- R6::R6Class("Registration",
                                 self$max_iter = max_iter
                                 self$folder = folder
                                 self$filename = filename
+                                self$verbose <- isTRUE(verbose)
 
                                 # NEW: save mode
                                 self$basis_mode <- basis_mode
@@ -176,6 +181,9 @@ Registration_new <- R6::R6Class("Registration",
 
       # Compute initial energy E_0
       E0 <- compute_E_grid(self$f1_grid, self$f2_grid)
+      if (isTRUE(self$verbose)) {
+        message(sprintf("Iter %d: E = %.6f", 0L, E0))
+      }
 
       self$grad_f2_grid <- make_grad_f2_grid(self$grad_f2k_fun, self$Ugrid)
 
@@ -253,11 +261,14 @@ Registration_new <- R6::R6Class("Registration",
       if (length(self$E_history) >= 2) {
         dE <- abs(self$E_history[length(self$E_history)] -
                     self$E_history[length(self$E_history) - 1])
-        message(sprintf("Iter %d: E = %.6f, ΔE = %.3e", self$iter, E_curr, dE))
+        if (isTRUE(self$verbose)) {
+          message(sprintf("Iter %d: E = %.6f, ΔE = %.3e", self$iter, E_curr, dE))
+        }
 
         if (dE < self$eps_energy) {
-          message(sprintf("Converged at iter %d (|ΔE| < %.1e)",
-                          self$iter, self$eps_energy))
+          if (isTRUE(self$verbose)) {
+            message(sprintf("Converged at iter %d (|ΔE| < %.1e)", self$iter, self$eps_energy))
+          }
         }
       }
 
@@ -338,19 +349,17 @@ Registration_new <- R6::R6Class("Registration",
 
           # ---- Case 1: converge ----
           if (abs(dE) < self$eps_energy) {
-            message(sprintf(
-              "Stopped at iteration %d: |ΔE| < %.1e (converged)",
-              self$iter, self$eps_energy
-            ))
+            if (isTRUE(self$verbose)) {
+              message(sprintf("Stopped at iteration %d: |ΔE| < %.1e (converged)", ...))
+            }
             break
           }
 
           # ---- Case 2: Energy Upgrade ----
           if (dE > 0) {
-            message(sprintf(
-              "Stopped at iteration %d: Energy increased (ΔE = %.4e)",
-              self$iter, dE
-            ))
+            if (isTRUE(self$verbose)) {
+              message(sprintf("Stopped at iteration %d: Energy increased (ΔE = %.4e)", ...))
+            }
             break
           }
         }
@@ -404,10 +413,12 @@ Registration_new <- R6::R6Class("Registration",
               self$E_history[length(self$E_history) - 1]
           )
           if (dE < self$eps_energy) {
-            message(sprintf(
-              "Early stop at iter %d: |ΔE| < %.1e",
-              self$iter, self$eps_energy
-            ))
+            if (isTRUE(self$verbose)){
+              message(sprintf(
+                "Early stop at iter %d: |ΔE| < %.1e",
+                self$iter, self$eps_energy
+              ))
+            }
             break
           }
         }

@@ -89,6 +89,8 @@ It supports:
 \item{\code{folder}}{Optional folder path for autosaving state.}
 
 \item{\code{filename}}{default "reg_state.rds"}
+
+\item{\code{verbose}}{If TRUE, print per-iteration energy updates as the optimizer runs.}
 }
 \if{html}{\out{</div>}}
 }
@@ -123,7 +125,8 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
   max_iter = 100,
   basis_mode = c("full", "div_free"),
   folder = NULL,
-  filename = "reg_state.rds"
+  filename = "reg_state.rds",
+  verbose = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -151,6 +154,8 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
 \item{\code{folder}}{Folder for autosave (optional).}
 
 \item{\code{filename}}{filename for autosave, default "reg_state.rds"}
+
+\item{\code{verbose}}{If TRUE, print per-iteration energy updates as the optimizer runs.}
 }
 \if{html}{\out{</div>}}
 }

@@ -126,7 +126,9 @@ of \code{pme2} to the unit domain (updated each cycle).}
 
 \item{\code{save_dir}}{Character. Directory path for saving intermediate states.}
 
-\item{\code{filename}}{Character. File name for autosaving registration state.
+\item{\code{filename}}{Character. File name for autosaving registration state.}
+
+\item{\code{verbose}}{printing log.
 Initialize a PME Registration Cycle Object
 
 Constructs a new \code{PME_Registration_Cycle} object and sets up
@@ -163,7 +165,8 @@ for the alternating PME–registration procedure.}
   fixed_lambda_f2 = NULL,
   default_args = NULL,
   save_dir = NULL,
-  filename = NULL
+  filename = NULL,
+  verbose = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -198,7 +201,9 @@ strategy for PME fitting of \code{data2}. One of
 \item{\code{save_dir}}{Optional character string specifying a directory for
 autosaving intermediate states.}
 
-\item{\code{filename}}{Optional character string specifying the filename used
+\item{\code{filename}}{Optional character string specifying the filename used}
+
+\item{\code{verbose}}{printing log
 when saving registration state.}
 }
 \if{html}{\out{</div>}}
