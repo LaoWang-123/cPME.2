@@ -247,16 +247,9 @@ Nothing. Continues modifying the registration state.
 \subsection{Method \code{save_state()}}{
 Save the full registration object into an RDS file.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Registration_new$save_state(filename = "reg_state.rds")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Registration_new$save_state()}\if{html}{\out{</div>}}
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{filename}}{filename for autosave, default "reg_state.rds".}
-}
-\if{html}{\out{</div>}}
-}
 \subsection{Returns}{
 Nothing. Writes `reg_state.rds` to `self$folder`.
 }

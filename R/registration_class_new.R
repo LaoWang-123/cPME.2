@@ -323,7 +323,7 @@ Registration_new <- R6::R6Class("Registration",
 
       # --- Autosave to folder ---
       if (!is.null(self$folder)) {
-        self$save_state(filename = self$filename)
+        self$save_state()
       }
 
       invisible(E_curr)
@@ -430,13 +430,12 @@ Registration_new <- R6::R6Class("Registration",
     # Save state to folder as RDS file
     # ---------------------------------------------------------
     #' @description Save the full registration object into an RDS file.
-    #' @param filename filename for autosave, default "reg_state.rds".
     #' @return Nothing. Writes `reg_state.rds` to `self$folder`.
-    save_state = function(filename="reg_state.rds") {
+    save_state = function() {
       if (!dir.exists(self$folder)) {
         dir.create(self$folder, recursive = TRUE)
       }
-      saveRDS(self, file.path(self$folder, filename))
+      saveRDS(self, file.path(self$folder, self$filename))
     }
 
                             ) # end public list

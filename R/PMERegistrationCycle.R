@@ -55,7 +55,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #'        of \code{pme2} to the unit domain (updated each cycle).
       #'
       #' @field reg Registration object storing the current registration model.
-      #' @field gamma Function or object representing the current reparameterization map.
       #' @field f2_warped Function. Warped embedding of \code{f2} under the current \code{gamma}.
       #'
       #' @field converged Logical. Indicates whether the alternating optimization has converged.
@@ -105,7 +104,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       scale_f2 = NULL,           # scaling info for current pme2 (changes each cycle)
 
       reg = NULL,
-      gamma = NULL,
       f2_warped = NULL,          # last state's f2_k (warped embedding)
 
       converged = FALSE,
@@ -284,12 +282,19 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$scale_f1 <- private$.compute_projection_and_scale(self$pme1, self$data1)
         self$f1_fun <- private$.make_scaled_embedding(self$pme1, self$scale_f1, d = self$d)
 
+        self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
+        self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2, d = self$d)
+
         # initial history
         self$history$initial <- list(
           k = 0,
           stage = "init",
           pme1 = self$pme1,
-          pme2 = self$pme2
+          pme2 = self$pme2,
+          f1_fun = self$f1_fun,
+          f2_fun = self$f2_fun,
+          scale_f1 = self$scale_f1,
+          scale_f2 = self$scale_f2
         )
 
         invisible(self)
@@ -316,12 +321,9 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' internal state variables (including \code{pme2}, \code{gamma},
       #' scaling information, and embedding functions) are updated.
       #'
-      #' @param record_full Logical. If \code{TRUE}, stores full per-cycle
-      #' state information in \code{history}. If \code{FALSE}, stores a
-      #' reduced record.
       #'
       #' @return The updated \code{PME_Registration_Cycle} object (invisibly).
-      run_cycle = function(record_full = TRUE) {
+      run_cycle = function() {
 
         # auto-initialize if user didn't call fit_initial()
         if (is.null(self$pme1) || is.null(self$pme2)) {
@@ -334,12 +336,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         k <- self$cycle_idx + 1L
 
         # 1) compute scaling for current f2 (must be recomputed each cycle)
-        self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
-
         # 2) make scaled embedding functions for registration
-
-        self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2,d = self$d)
-        self$f2_grad <- private$.make_scaled_grad(self$pme2, self$scale_f2)
+        # These two steps have completed in initial_fit once.
 
         # 3) registration
         self$reg <- private$.register_once(
@@ -349,7 +347,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         )
 
         last_state <- private$.extract_last_state(self$reg)
-        self$gamma <- last_state$gamma_k
         self$f2_warped <- last_state$f2_k
 
         # 4) update cached f2 initialization using final f2_k
@@ -372,15 +369,22 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           lambda = lambda_to_use # Here input the initialization and lambda will override the pme_args_f2
         )
 
+        # 1) compute scaling for current f2 (must be recomputed each cycle)
+        self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
+
+        # 2) make scaled embedding functions for registration
+
+        self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2,d = self$d)
+        self$f2_grad <- private$.make_scaled_grad(self$pme2, self$scale_f2)
+
         # 6) record history
         private$.record_history(
           k = k,
-          new_pme2 = self$pme2,
-          scale_f1 = self$scale_f1,
-          scale_f2 = self$scale_f2,
           reg = self$reg,
-          lambda = lambda_to_use,
-          record_full = record_full
+          new_pme2 = self$pme2,
+          scale_f2 = self$scale_f2,
+          f2_fun = self$f2_fun,
+          lambda = lambda_to_use
         )
 
 
@@ -410,8 +414,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @param stop_rule Character string specifying the stopping criterion.
       #'        One of \code{"none"} (no early stopping) or
       #'        \code{"delta_E"} (stop when energy change is below \code{tol_E}).
-      #' @param record_full Logical. Passed to \code{run_cycle()} to control
-      #'        how much per-cycle information is stored.
       #' @param reinit Logical. If \code{TRUE}, resets the internal state
       #'        and refits the initial PME models before running cycles.
       #'
@@ -427,10 +429,13 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       filename = NULL,
       tol_E = NULL,
       stop_rule = c("none", "delta_E"),
-      record_full = TRUE,
       reinit = FALSE
       ) {
         stop_rule <- match.arg(stop_rule)
+        # ---- how many cycles already completed? ----
+        completed <- length(self$history$cycles)
+        start_cycle <- completed + 1L
+        end_cycle   <- completed + as.integer(n_cycles)
 
         # print settings
         if (self$verbose) {
@@ -438,11 +443,13 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
           cat("========================================\n")
           cat("PMERegistrationCycle START\n")
-          cat(sprintf("n_cycles   : %d\n", as.integer(n_cycles)))
-          cat(sprintf("d          : %d\n", as.integer(self$d)))
-          cat(sprintf("eps_step   : %s\n", as.character(ra$eps_step)))
-          cat(sprintf("eps_energy : %s\n", as.character(ra$eps_energy)))
-          cat(sprintf("max_iter   : %s\n", as.character(ra$max_iter)))
+          cat(sprintf("already_done : %d\n", as.integer(completed)))
+          cat(sprintf("n_cycles     : %d\n", as.integer(n_cycles)))
+          cat(sprintf("will_run     : %d -> %d (overall)\n", as.integer(start_cycle), as.integer(end_cycle)))
+          cat(sprintf("d            : %d\n", as.integer(self$d)))
+          cat(sprintf("eps_step     : %s\n", as.character(ra$eps_step)))
+          cat(sprintf("eps_energy   : %s\n", as.character(ra$eps_energy)))
+          cat(sprintf("max_iter     : %s\n", as.character(ra$max_iter)))
           cat("========================================\n")
           flush.console()
         }
@@ -470,11 +477,16 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$stop_reason <- NULL
 
         for (i in seq_len(n_cycles)) {
+
           # print cycle number
           if (self$verbose) {
-            cat(sprintf("\n[PMEReg] cycle %d / %d\n", i, n_cycles))
+            overall_i <- start_cycle + i - 1L
+            cat(sprintf("\n[PMEReg] cycle %d / %d (this run %d / %d)\n",
+                        as.integer(overall_i), as.integer(end_cycle),
+                        as.integer(i), as.integer(n_cycles)))
           }
-          self$run_cycle(record_full = record_full)
+
+          self$run_cycle()
 
           # save the result of our PME registration cycle
           if (!is.null(self$save_dir) && !is.null(self$filename)) {
@@ -542,13 +554,11 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
             max_iter = 10,
             basis_mode = "div_free",
             basis_set = build_basis_set(5,5,basis = neumann_basis),
-            subset(expand.grid(
+            Ugrid = subset(expand.grid(
               u = seq(0, 1, length.out = 60),
               v = seq(0, 1, length.out = 60)),
-              (u - 0.5)^2 + (v - 0.5)^2 <= 0.5^2)# We need to define basis and Ugrid manually
+              (u - 0.5)^2 + (v - 0.5)^2 <= 0.5^2))# We need to define basis and Ugrid manually
           )
-
-        )
       },
 
       .reset_state = function() {
@@ -559,7 +569,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$scale_f1 <- NULL
         self$scale_f2 <- NULL
         self$reg <- NULL
-        self$gamma <- NULL
         self$f2_warped <- NULL
         self$converged <- FALSE
         self$stop_reason <- NULL
@@ -698,26 +707,25 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
       .record_history = function(
       k,
-      new_pme2,
-      scale_f1,
-      scale_f2,
       reg,
-      lambda,
-      record_full = TRUE
+      new_pme2,
+      scale_f2,
+      f2_fun,
+      lambda
       ) {
         E_hist <- reg$E_history
         final_E <- if (!is.null(E_hist) && length(E_hist) > 0L) tail(E_hist, 1) else NA_real_
 
         entry <- list(
           k = k,
-          lambda_f2 = lambda,
           reg = reg,
-          n_iter = if (!is.null(E_hist)) length(E_hist) else NA_integer_,
+          lambda_f2 = lambda,
+          n_iter = length(E_hist),
           final_E = final_E,
-          scale_f1 = if (record_full) scale_f1 else NULL,
-          scale_f2 = if (record_full) scale_f2 else NULL,
-          reg_E_history = if (record_full) E_hist else NULL,
-          pme2_after = if (record_full) new_pme2 else NULL
+          scale_f2 = scale_f2,
+          f2_fun = f2_fun,
+          reg_E_history = E_hist,
+          new_pme2 = new_pme2
         )
 
         # cycle history

@@ -10,7 +10,8 @@ generate_surface_data(
   n_u = 50,
   n_v = 50,
   noise_sd = 0,
-  seed = NULL
+  seed = NULL,
+  f_input = c("auto", "uv", "vector")
 )
 }
 \arguments{
@@ -25,6 +26,8 @@ generate_surface_data(
 \item{noise_sd}{default = 0}
 
 \item{seed}{default = NULL}
+
+\item{f_input}{c("auto", "uv", "vector")}
 }
 \value{
 a list of data to generate plots

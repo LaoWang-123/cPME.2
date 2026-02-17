@@ -173,6 +173,7 @@ grad_f_bowl <- function(u, v, R = 1.0, c = 1.5) {
 #' @param n_v default = 50
 #' @param noise_sd default = 0
 #' @param seed default = NULL
+#' @param f_input  c("auto", "uv", "vector")
 #'
 #' @returns a list of data to generate plots
 #' @export
@@ -184,7 +185,10 @@ generate_surface_data <- function(f,
                                   n_u = 50,
                                   n_v = 50,
                                   noise_sd = 0,
-                                  seed = NULL) {
+                                  seed = NULL,
+                                  f_input = c("auto", "uv", "vector")) {
+  f_input <- match.arg(f_input)
+
   # Optional reproducibility
   if (!is.null(seed)) set.seed(seed)
 
@@ -195,10 +199,28 @@ generate_surface_data <- function(f,
     uv_grid <- expand.grid(u = u_seq, v = v_seq)
   }
 
+  f_use <- switch(
+    f_input,
+    "uv" = function(uv) {
+      uv <- as.numeric(uv)
+      f(uv[1], uv[2])
+    },
+    "vector" = function(uv) {
+      uv <- as.numeric(uv)
+      f(uv)
+    },
+    "auto" = function(uv) {
+      uv <- as.numeric(uv)
+      tryCatch(
+        f(uv[1], uv[2]),
+        error = function(e) f(uv)
+      )
+    }
+  )
+
+
   # Evaluate surface function f(u, v)
-  xyz <- t(apply(uv_grid, 1, function(uv) {
-    f(uv[1], uv[2])
-  }))
+  xyz <- t(apply(uv_grid, 1, f_use))
   colnames(xyz) <- c("x", "y", "z")
 
   # Add Gaussian noise if needed

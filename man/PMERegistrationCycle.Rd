@@ -112,8 +112,6 @@ of \code{pme2} to the unit domain (updated each cycle).}
 
 \item{\code{reg}}{Registration object storing the current registration model.}
 
-\item{\code{gamma}}{Function or object representing the current reparameterization map.}
-
 \item{\code{f2_warped}}{Function. Warped embedding of \code{f2} under the current \code{gamma}.}
 
 \item{\code{converged}}{Logical. Indicates whether the alternating optimization has converged.}
@@ -283,18 +281,9 @@ scaling information, and embedding functions) are updated.
 \if{latex}{\out{\hypertarget{method-PMERegistrationCycle-run_cycle}{}}}
 \subsection{Method \code{run_cycle()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$run_cycle(record_full = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$run_cycle()}\if{html}{\out{</div>}}
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{record_full}}{Logical. If \code{TRUE}, stores full per-cycle
-state information in \code{history}. If \code{FALSE}, stores a
-reduced record.}
-}
-\if{html}{\out{</div>}}
-}
 \subsection{Returns}{
 The updated \code{PME_Registration_Cycle} object (invisibly).
 Executes multiple alternating PME–registration cycles.
@@ -320,7 +309,6 @@ stopping rule.
   filename = NULL,
   tol_E = NULL,
   stop_rule = c("none", "delta_E"),
-  record_full = TRUE,
   reinit = FALSE
 )}\if{html}{\out{</div>}}
 }
@@ -342,9 +330,6 @@ used when saving registration state.}
 \item{\code{stop_rule}}{Character string specifying the stopping criterion.
 One of \code{"none"} (no early stopping) or
 \code{"delta_E"} (stop when energy change is below \code{tol_E}).}
-
-\item{\code{record_full}}{Logical. Passed to \code{run_cycle()} to control
-how much per-cycle information is stored.}
 
 \item{\code{reinit}}{Logical. If \code{TRUE}, resets the internal state
 and refits the initial PME models before running cycles.}
