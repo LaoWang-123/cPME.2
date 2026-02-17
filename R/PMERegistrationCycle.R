@@ -360,7 +360,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           dataX = self$data2,
           pme_args = self$pme_args_f2,
           initialization = updated_init, # Use the new initialization (old centers but new params)
-          lambda = lambda_to_use
+          lambda = lambda_to_use # Here input the initialization and lambda will override the pme_args_f2
         )
 
         # 6) record history
@@ -540,27 +540,22 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
       # Generic initializer (returns an initialization object)
       .init_pme = function(dataX, init_args = NULL, rescale = FALSE) {
-        args <- c(
+
+        args <- modifyList(
           list(x = dataX, d = self$d, rescale = rescale),
           private$.null_to_list(init_args)
         )
-        # avoid user overwriting
-        args$x <- dataX
-        args$d <- self$d
-        args$rescale <- rescale
 
         do.call(initialize_pme, args)
       },
 
       # Generic pme fitter (returns a pme result)
       .fit_pme = function(dataX, pme_args = NULL, initialization = NULL, lambda = NULL) {
-        args <- c(
-          list(data = dataX, d = self$d),
+
+        args <- modifyList(
+          list(x = dataX, d = self$d),
           private$.null_to_list(pme_args)
         )
-        # avoid user overwriting
-        args$data <- dataX
-        args$d <- self$d
 
         if (!is.null(initialization)) args$initialization <- initialization
         if (!is.null(lambda)) args$lambda <- lambda
