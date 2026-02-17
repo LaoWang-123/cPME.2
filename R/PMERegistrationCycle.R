@@ -542,7 +542,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       .init_pme = function(dataX, init_args = NULL, rescale = FALSE) {
 
         args <- modifyList(
-          list(x = dataX, d = self$d, rescale = rescale),
+          list(x = dataX, d = self$d, rescale = rescale), # The parameter names must be corresponded to the function parameters correctly.
           private$.null_to_list(init_args)
         )
 
@@ -553,8 +553,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       .fit_pme = function(dataX, pme_args = NULL, initialization = NULL, lambda = NULL) {
 
         args <- modifyList(
-          list(x = dataX, d = self$d),
-          private$.null_to_list(pme_args)
+          list(data = dataX, d = self$d),
+          private$.null_to_list(pme_args) # The parameter names must be corresponded to the function parameters correctly.
         )
 
         if (!is.null(initialization)) args$initialization <- initialization
