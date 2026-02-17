@@ -282,8 +282,11 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         self$scale_f1 <- private$.compute_projection_and_scale(self$pme1, self$data1)
         self$f1_fun <- private$.make_scaled_embedding(self$pme1, self$scale_f1, d = self$d)
 
+        # 1) compute scaling for current f2 (must be recomputed each cycle)
+        # 2) make scaled embedding and grad scaled embedding functions for registration
         self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
         self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2, d = self$d)
+        self$f2_grad <- private$.make_scaled_grad(self$pme2, self$scale_f2)
 
         # initial history
         self$history$initial <- list(
@@ -336,7 +339,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         k <- self$cycle_idx + 1L
 
         # 1) compute scaling for current f2 (must be recomputed each cycle)
-        # 2) make scaled embedding functions for registration
+        # 2) make scaled embedding and grad scaled embedding functions for registration
         # These two steps have completed in initial_fit once.
 
         # 3) registration
@@ -369,11 +372,14 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           lambda = lambda_to_use # Here input the initialization and lambda will override the pme_args_f2
         )
 
+        # This is the next iteration's input and this iteration's output.
+        # We used the refit pme and its scaled embedding function as our output.
+        # These two steps have completed in initial_fit once.
+
         # 1) compute scaling for current f2 (must be recomputed each cycle)
         self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
 
         # 2) make scaled embedding functions for registration
-
         self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2,d = self$d)
         self$f2_grad <- private$.make_scaled_grad(self$pme2, self$scale_f2)
 
