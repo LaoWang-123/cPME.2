@@ -129,6 +129,10 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #'
       #' @param data1 Numeric matrix or array representing the first dataset (fixed).
       #' @param data2 Numeric matrix or array representing the second dataset (moving).
+      #' @param pme1 pme1 object
+      #' @param pme2 pme2 object
+      #' @param initialization_f1 initialization for pme1
+      #' @param initialization_f2 initialization for pme2
       #' @param d Integer. Intrinsic dimension of the parameterization domain.
       #' @param pme_args_f1 List of arguments passed to \code{pme()} when fitting \code{data1}.
       #' @param pme_args_f2 List of arguments passed to \code{pme()} when fitting \code{data2}.
@@ -157,75 +161,68 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #'   d = 2
       #' )
       #' }
-      initialize = function(
-      data1,
-      data2,
-      d = 2,
-      pme_args_f1 = list(),
-      pme_args_f2 = list(),
-      init_args_f1 = list(),
-      init_args_f2 = list(),
-      reg_args = list(),
-      lambda_policy_f2 = c("reuse_prev", "fixed", "retune"),
-      fixed_lambda_f2 = NULL,
-      default_args = NULL,
-      save_dir = NULL,
-      filename = NULL,
-      verbose = TRUE
-      ) {
-        self$data1 <- data1
-        self$data2 <- data2
-        self$d <- as.integer(d)
+      initialize = function(data1,data2,pme1 = NULL,pme2 = NULL,
+                            initialization_f1 = NULL,initialization_f2 = NULL,d = 2,
+                            pme_args_f1 = list(),pme_args_f2 = list(),init_args_f1 = list(),init_args_f2 = list(),
+                            reg_args = list(),lambda_policy_f2 = c("reuse_prev", "fixed", "retune"),
+                            fixed_lambda_f2 = NULL,default_args = NULL,save_dir = NULL,
+                            filename = NULL,verbose = TRUE) {
 
-        # ---- defaults (optional) ----
-        defaults <- private$.get_default_args(default_args)
+          # ---- store inputs (may be NULL) ----
+          self$data1 <- data1
+          self$data2 <- data2
+          self$pme1  <- pme1
+          self$pme2  <- pme2
+          self$initialization_f1 <- initialization_f1
+          self$initialization_f2 <- initialization_f2
 
-        # merge lists: user args override defaults
-        self$pme_args_f1 <- modifyList(
-          private$.null_to_list(defaults$pme_args_f1),
-          private$.null_to_list(pme_args_f1),
-          keep.null = TRUE
-        )
-        self$pme_args_f2 <- modifyList(
-          private$.null_to_list(defaults$pme_args_f2),
-          private$.null_to_list(pme_args_f2),
-          keep.null = TRUE
-        )
+          self$d <- as.integer(d)
 
-        # init args:
-        self$init_args_f1 <- modifyList(
-          private$.null_to_list(defaults$init_args_f1),
-          private$.null_to_list(init_args_f1),
-          keep.null = TRUE
-        )
-        self$init_args_f2 <- modifyList(
-          private$.null_to_list(defaults$init_args_f2),
-          private$.null_to_list(init_args_f2),
-          keep.null = TRUE
-        )
+          # ---- defaults args ----
+          defaults <- private$.get_default_args(default_args)
 
-        # reg args:
-        self$reg_args <- modifyList(
-          private$.null_to_list(defaults$reg_args),
-          private$.null_to_list(reg_args),
-          keep.null = TRUE
-        )
+          self$pme_args_f1 <- modifyList(
+            private$.null_to_list(defaults$pme_args_f1),
+            private$.null_to_list(pme_args_f1),
+            keep.null = TRUE
+          )
+          self$pme_args_f2 <- modifyList(
+            private$.null_to_list(defaults$pme_args_f2),
+            private$.null_to_list(pme_args_f2),
+            keep.null = TRUE
+          )
 
-        self$lambda_policy_f2 <- match.arg(lambda_policy_f2)
-        self$fixed_lambda_f2 <- fixed_lambda_f2
+          self$init_args_f1 <- modifyList(
+            private$.null_to_list(defaults$init_args_f1),
+            private$.null_to_list(init_args_f1),
+            keep.null = TRUE
+          )
+          self$init_args_f2 <- modifyList(
+            private$.null_to_list(defaults$init_args_f2),
+            private$.null_to_list(init_args_f2),
+            keep.null = TRUE
+          )
 
-        self$cycle_idx <- 0L
-        self$history <- list(
-          initial = NULL,
-          cycles  = list()
-        )
+          self$reg_args <- modifyList(
+            private$.null_to_list(defaults$reg_args),
+            private$.null_to_list(reg_args),
+            keep.null = TRUE
+          )
 
-        self$save_dir <- save_dir
-        self$filename <- filename
-        self$verbose <- isTRUE(verbose)
+          self$lambda_policy_f2 <- match.arg(lambda_policy_f2)
+          self$fixed_lambda_f2 <- fixed_lambda_f2
 
-        invisible(self)
-      },
+          self$cycle_idx <- 0L
+          self$history <- list(initial = NULL,
+                               cycles = list())
+
+          self$save_dir <- save_dir
+          self$filename <- filename
+          self$verbose <- isTRUE(verbose)
+
+          invisible(self)
+        },
+
 
       # -------------------------
       # Public API
@@ -255,30 +252,44 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @return The updated \code{PME_Registration_Cycle} object (invisibly).
       fit_initial = function() {
 
-        # f1 init + fit
-        self$initialization_f1 <- private$.init_pme(
-          dataX = self$data1,
-          init_args = self$init_args_f1,
-          rescale = FALSE
-        )
-        self$pme1 <- private$.fit_pme(
-          dataX = self$data1,
-          pme_args = self$pme_args_f1,
-          initialization = self$initialization_f1
-        )
+        have_pme_init_pair <- !is.null(self$pme1) &&
+          !is.null(self$pme2) &&
+          !is.null(self$initialization_f1) &&
+          !is.null(self$initialization_f2)
 
-        # f2 init + fit
-        self$initialization_f2 <- private$.init_pme(
-          dataX = self$data2,
-          init_args = self$init_args_f2,
-          rescale = FALSE
-        )
-        self$pme2 <- private$.fit_pme(
-          dataX = self$data2,
-          pme_args = self$pme_args_f2,
-          initialization = self$initialization_f2
-        )
+        if (!have_pme_init_pair) {
 
+          # ---- data mode: run init + fit for BOTH f1/f2 ----
+          # f1 init + fit
+          self$initialization_f1 <- private$.init_pme(
+            dataX = self$data1,
+            init_args = self$init_args_f1,
+            rescale = FALSE
+          )
+          self$pme1 <- private$.fit_pme(
+            dataX = self$data1,
+            pme_args = self$pme_args_f1,
+            initialization = self$initialization_f1
+          )
+
+          # f2 init + fit
+          self$initialization_f2 <- private$.init_pme(
+            dataX = self$data2,
+            init_args = self$init_args_f2,
+            rescale = FALSE
+          )
+          self$pme2 <- private$.fit_pme(
+            dataX = self$data2,
+            pme_args = self$pme_args_f2,
+            initialization = self$initialization_f2
+          )
+
+        } else {
+          # ---- pme+init mode: skip init + fit ----
+          if (self$verbose) message("[fit_initial] Using provided pme1/pme2 + initializations; skipping init_pme().")
+        }
+
+        # ---- scaling + embedding (still needed in both modes) ----
         self$scale_f1 <- private$.compute_projection_and_scale(self$pme1, self$data1)
         self$f1_fun <- private$.make_scaled_embedding(self$pme1, self$scale_f1, d = self$d)
 
@@ -329,11 +340,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       run_cycle = function() {
 
         # auto-initialize if user didn't call fit_initial()
-        if (is.null(self$pme1) || is.null(self$pme2)) {
+        if (is.null(self$f1_fun) || is.null(self$f2_fun)) {
           self$fit_initial()
-        }
-        if (is.null(self$initialization_f2)) {
-          stop("initialization_f2 is NULL after fit_initial(). Check initialize_pme() call.")
         }
 
         k <- self$cycle_idx + 1L

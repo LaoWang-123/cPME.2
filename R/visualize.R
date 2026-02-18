@@ -100,28 +100,55 @@ visualize_gamma_scalar_input <- function(gamma_fun, n = 25,
 #' data_f2 <- generate_surface_data(f2, 60, 60)
 #' plot_surface_pair(data_f1, data_f2)
 plot_surface_pair <- function(data1, data2,
-                              color_mode = c("uv_hue", "u", "v"),
+                              uv_scale = c("global","each"),
                               opacity1 = 0.7,
                               opacity2 = 0.9,
                               title = "Simulated Surfaces (f1 & f2)") {
 
-  color_mode <- match.arg(color_mode)
+
+  uv_scale   <- match.arg(uv_scale)
+
+  # --- helper: min-max to [0,1] ---
+  to_01 <- function(x) {
+    x <- as.numeric(x)
+    r <- range(x, na.rm = TRUE)
+    if (!is.finite(r[1]) || !is.finite(r[2]) || r[1] == r[2]) {
+      return(rep(0.5, length(x)))  # degenerate case: constant / all NA
+    }
+    (x - r[1]) / (r[2] - r[1])
+  }
 
   # Extract components
   df1 <- cbind(data1$XYZ, data1$UV_grid)
   df2 <- cbind(data2$XYZ, data2$UV_grid)
 
-  # --- define color ---
-  if (color_mode == "uv_hue") {
-    color1 <- rgb(df1$u, df1$v, 1 - df1$u, maxColorValue = 1)
-    color2 <- rgb(df2$u, df2$v, 1 - df2$u, maxColorValue = 1)
-  } else if (color_mode == "u") {
-    color1 <- df1$u
-    color2 <- df2$u
-  } else {
-    color1 <- df1$v
-    color2 <- df2$v
+  # Basic checks (optional but helps debugging)
+  if (!all(c("u","v") %in% colnames(df1)) || !all(c("u","v") %in% colnames(df2))) {
+    stop("UV_grid must contain columns named 'u' and 'v'.")
   }
+  if (!all(c("x","y","z") %in% colnames(df1)) || !all(c("x","y","z") %in% colnames(df2))) {
+    stop("XYZ must contain columns named 'x', 'y', 'z'.")
+  }
+
+  # --- normalize u,v into [0,1] ---
+  if (uv_scale == "each") {
+    df1$u01 <- to_01(df1$u); df1$v01 <- to_01(df1$v)
+    df2$u01 <- to_01(df2$u); df2$v01 <- to_01(df2$v)
+  } else { # global: share the same scaling across both surfaces
+    u_all <- c(df1$u, df2$u)
+    v_all <- c(df1$v, df2$v)
+    u01_all <- to_01(u_all)
+    v01_all <- to_01(v_all)
+    n1 <- nrow(df1)
+    df1$u01 <- u01_all[seq_len(n1)]
+    df2$u01 <- u01_all[(n1 + 1):length(u01_all)]
+    df1$v01 <- v01_all[seq_len(n1)]
+    df2$v01 <- v01_all[(n1 + 1):length(v01_all)]
+  }
+
+  # --- define color (use u01/v01) ---
+  color1 <- rgb(df1$u01, df1$v01, 1 - df1$u01, maxColorValue = 1)
+  color2 <- rgb(df2$u01, df2$v01, 1 - df2$u01, maxColorValue = 1)
 
   # --- Plotly scatter3D for both surfaces ---
   p <- plot_ly() %>%
@@ -152,6 +179,7 @@ plot_surface_pair <- function(data1, data2,
 
   return(p)
 }
+
 
 
 

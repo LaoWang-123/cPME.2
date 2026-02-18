@@ -153,6 +153,10 @@ for the alternating PME–registration procedure.}
 \if{html}{\out{<div class="r">}}\preformatted{PMERegistrationCycle$new(
   data1,
   data2,
+  pme1 = NULL,
+  pme2 = NULL,
+  initialization_f1 = NULL,
+  initialization_f2 = NULL,
   d = 2,
   pme_args_f1 = list(),
   pme_args_f2 = list(),
@@ -174,6 +178,14 @@ for the alternating PME–registration procedure.}
 \item{\code{data1}}{Numeric matrix or array representing the first dataset (fixed).}
 
 \item{\code{data2}}{Numeric matrix or array representing the second dataset (moving).}
+
+\item{\code{pme1}}{pme1 object}
+
+\item{\code{pme2}}{pme2 object}
+
+\item{\code{initialization_f1}}{initialization for pme1}
+
+\item{\code{initialization_f2}}{initialization for pme2}
 
 \item{\code{d}}{Integer. Intrinsic dimension of the parameterization domain.}
 

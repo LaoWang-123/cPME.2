@@ -144,7 +144,7 @@ Registration_new <- R6::R6Class("Registration",
                                 self$verbose <- isTRUE(verbose)
 
                                 # NEW: save mode
-                                self$basis_mode <- basis_mode
+                                self$basis_mode <- match.arg(basis_mode)
 
                                 # Precompute basis fields
                                 self$bi_set   <- build_bi_set(basis_set = self$basis_set, mode = self$basis_mode) ## need to add mode parameter
@@ -248,7 +248,6 @@ Registration_new <- R6::R6Class("Registration",
 
       ####################################
       #### Newly edited on 11/23/2025
-      n=nrow(self$Ugrid)
       f2_next_grid <- make_f2_grid(f2_next, self$Ugrid)
 
       # --- 4) Compute new energy ---
@@ -350,7 +349,7 @@ Registration_new <- R6::R6Class("Registration",
           # ---- Case 1: converge ----
           if (abs(dE) < self$eps_energy) {
             if (isTRUE(self$verbose)) {
-              message(sprintf("Stopped at iteration %d: |ΔE| < %.1e (converged)", ...))
+              message(sprintf("Stopped at iteration %d: |ΔE| < %.1e (converged)", i,self$eps_energy))
             }
             break
           }
@@ -358,7 +357,7 @@ Registration_new <- R6::R6Class("Registration",
           # ---- Case 2: Energy Upgrade ----
           if (dE > 0) {
             if (isTRUE(self$verbose)) {
-              message(sprintf("Stopped at iteration %d: Energy increased (ΔE = %.4e)", ...))
+              message(sprintf("Stopped at iteration %d: Energy increased (ΔE = %.4e)", i, dE))
             }
             break
           }
