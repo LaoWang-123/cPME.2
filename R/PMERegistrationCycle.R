@@ -28,6 +28,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #'
       #' @field init_args_f1 List of arguments passed to \code{initialize_pme()} for the first dataset (executed once).
       #' @field init_args_f2 List of arguments passed to \code{initialize_pme()} for the second dataset (executed once).
+      #' @field init_trials The maximum times to run initialization for pme f2, default = 5.
       #'
       #' @field reg_args List of arguments controlling the registration step.
       #'
@@ -79,6 +80,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       # init args for initialize_pme (run ONCE)
       init_args_f1 = NULL,
       init_args_f2 = NULL,
+      init_trials = NULL,
 
       reg_args = NULL,
 
@@ -138,6 +140,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @param pme_args_f2 List of arguments passed to \code{pme()} when fitting \code{data2}.
       #' @param init_args_f1 List of arguments passed to \code{initialize_pme()} for \code{data1}.
       #' @param init_args_f2 List of arguments passed to \code{initialize_pme()} for \code{data2}.
+      #' @param init_trials The maximum times to run initialization for pme f2, default = 5.
       #' @param reg_args List of arguments controlling the registration step.
       #' @param lambda_policy_f2 Character string specifying the lambda selection
       #' strategy for PME fitting of \code{data2}. One of
@@ -163,7 +166,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' }
       initialize = function(data1,data2,pme1 = NULL,pme2 = NULL,
                             initialization_f1 = NULL,initialization_f2 = NULL,d = 2,
-                            pme_args_f1 = list(),pme_args_f2 = list(),init_args_f1 = list(),init_args_f2 = list(),
+                            pme_args_f1 = list(),pme_args_f2 = list(),init_args_f1 = list(),init_args_f2 = list(),init_trials=5,
                             reg_args = list(),lambda_policy_f2 = c("reuse_prev", "fixed", "retune"),
                             fixed_lambda_f2 = NULL,default_args = NULL,save_dir = NULL,
                             filename = NULL,verbose = TRUE) {
@@ -175,6 +178,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           self$pme2  <- pme2
           self$initialization_f1 <- initialization_f1
           self$initialization_f2 <- initialization_f2
+          self$init_trials = init_trials
 
           self$d <- as.integer(d)
 
@@ -267,7 +271,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         if (is.null(self$initialization_f2)) {
 
           tries <- 0L
-          max_tries <- 5L
+          max_tries <- self$init_trials
           last_check <- NULL
 
           repeat {

@@ -79,6 +79,8 @@ The initial state is recorded in \code{init_history}.
 
 \item{\code{init_args_f2}}{List of arguments passed to \code{initialize_pme()} for the second dataset (executed once).}
 
+\item{\code{init_trials}}{The maximum times to run initialization for pme f2, default = 5.}
+
 \item{\code{reg_args}}{List of arguments controlling the registration step.}
 
 \item{\code{lambda_policy_f2}}{Character. Strategy for selecting lambda in PME fitting of data2.
@@ -162,6 +164,7 @@ for the alternating PME–registration procedure.}
   pme_args_f2 = list(),
   init_args_f1 = list(),
   init_args_f2 = list(),
+  init_trials = 5,
   reg_args = list(),
   lambda_policy_f2 = c("reuse_prev", "fixed", "retune"),
   fixed_lambda_f2 = NULL,
@@ -196,6 +199,8 @@ for the alternating PME–registration procedure.}
 \item{\code{init_args_f1}}{List of arguments passed to \code{initialize_pme()} for \code{data1}.}
 
 \item{\code{init_args_f2}}{List of arguments passed to \code{initialize_pme()} for \code{data2}.}
+
+\item{\code{init_trials}}{The maximum times to run initialization for pme f2, default = 5.}
 
 \item{\code{reg_args}}{List of arguments controlling the registration step.}
 
