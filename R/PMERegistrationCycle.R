@@ -252,59 +252,77 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #' @return The updated \code{PME_Registration_Cycle} object (invisibly).
       fit_initial = function() {
 
-        have_pme_init_pair <- !is.null(self$pme1) &&
-          !is.null(self$pme2) &&
-          !is.null(self$initialization_f1) &&
-          !is.null(self$initialization_f2)
+        # --- flags ---
+        have_pme_pair <- !is.null(self$pme1) && !is.null(self$pme2)
 
-        if (!have_pme_init_pair) {
-
-          # ---- data mode: run init + fit for BOTH f1/f2 ----
-          # f1 init + fit
+        # --- 1) ensure initializations exist if needed ---
+        # If some init missing, compute missing ones (do not overwrite provided ones)
+        if (is.null(self$initialization_f1)) {
           self$initialization_f1 <- private$.init_pme(
             dataX = self$data1,
             init_args = self$init_args_f1,
             rescale = FALSE
           )
-          self$pme1 <- private$.fit_pme(
-            dataX = self$data1,
-            pme_args = self$pme_args_f1,
-            initialization = self$initialization_f1
-          )
-
-          # f2 init + fit
+        }
+        if (is.null(self$initialization_f2)) {
           self$initialization_f2 <- private$.init_pme(
             dataX = self$data2,
             init_args = self$init_args_f2,
             rescale = FALSE
           )
-          self$pme2 <- private$.fit_pme(
-            dataX = self$data2,
-            pme_args = self$pme_args_f2,
-            initialization = self$initialization_f2
-          )
-
-        } else {
-          # ---- pme+init mode: skip init + fit ----
-          if (self$verbose) message("[fit_initial] Using provided pme1/pme2 + initializations; skipping init_pme().")
         }
 
-        # ---- scaling + embedding (still needed in both modes) ----
+        # --- 2) ensure pme1/pme2 exist ---
+        # Cases:
+        # A) have_pme_pair: skip fitting
+        # B) no pme pair but have init pair: fit both using provided/created inits
+        # C) no pme pair and no init pair would have been handled by step (1) already
+        if (!have_pme_pair) {
+          # Fit pme1 if missing
+          if (is.null(self$pme1)) {
+            self$pme1 <- private$.fit_pme(
+              dataX = self$data1,
+              pme_args = self$pme_args_f1,
+              initialization = self$initialization_f1
+            )
+          }
+
+          # Fit pme2 if missing
+          if (is.null(self$pme2)) {
+            self$pme2 <- private$.fit_pme(
+              dataX = self$data2,
+              pme_args = self$pme_args_f2,
+              initialization = self$initialization_f2
+            )
+          }
+
+          if (self$verbose) {
+            msg <- "[fit_initial] PME models were missing; fitted pme1/pme2 using available initializations."
+            message(msg)
+          }
+        } else {
+          # have pme pair
+          if (self$verbose) {
+            message("[fit_initial] Using provided pme1/pme2; skipping fit_pme().")
+          }
+        }
+
+        # --- 3) scaling + embedding (always needed) ---
         self$scale_f1 <- private$.compute_projection_and_scale(self$pme1, self$data1)
         self$f1_fun <- private$.make_scaled_embedding(self$pme1, self$scale_f1, d = self$d)
 
-        # 1) compute scaling for current f2 (must be recomputed each cycle)
-        # 2) make scaled embedding and grad scaled embedding functions for registration
         self$scale_f2 <- private$.compute_projection_and_scale(self$pme2, self$data2)
         self$f2_fun <- private$.make_scaled_embedding(self$pme2, self$scale_f2, d = self$d)
         self$f2_grad <- private$.make_scaled_grad(self$pme2, self$scale_f2)
 
-        # initial history
+        # --- 4) history ---
         self$history$initial <- list(
           k = 0,
           stage = "init",
           pme1 = self$pme1,
           pme2 = self$pme2,
+          initialization_f1 = self$initialization_f1,
+          initialization_f2 = self$initialization_f2,
           f1_fun = self$f1_fun,
           f2_fun = self$f2_fun,
           scale_f1 = self$scale_f1,
@@ -313,6 +331,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
         invisible(self)
       },
+
 
 
       #' Run One Alternating Registration Cycle
