@@ -265,6 +265,39 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
           )
         }
         if (is.null(self$initialization_f2)) {
+
+          tries <- 0L
+          max_tries <- 5L
+          last_check <- NULL
+
+          repeat {
+            tries <- tries + 1L
+
+            self$initialization_f2 <- private$.init_pme(
+              dataX = self$data2,
+              init_args = self$init_args_f2,
+              rescale = FALSE
+            )
+
+            # call your package function
+            last_check <- check_pme_orientation(
+              init1 = self$initialization_f1,
+              init2 = self$initialization_f2,
+              pca_source = "all_centers",
+              verbose = TRUE
+            )
+
+            # if mirrored, retry; otherwise accept
+            if (!identical(last_check$final, "mirror_reversed")) break
+
+            if (tries >= max_tries) {
+              stop(sprintf(
+                "[fit_initial] f2 initialization kept returning mirror_reversed after %d tries.",
+                max_tries
+              ))
+            }
+          }
+
           self$initialization_f2 <- private$.init_pme(
             dataX = self$data2,
             init_args = self$init_args_f2,

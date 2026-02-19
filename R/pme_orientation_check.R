@@ -76,9 +76,18 @@
 # =========================
 # Main function: joint PCA
 # =========================
-check_init_by_joint_pca <- function(init1, init2,
+#' Use pca to check pme initialization orientation
+#'
+#' @param init1 initialization for pme1
+#' @param init2 initialization for pme2
+#' @param pca_source c("all_centers", "eight_corners")
+#' @param verbose default TRUE
+#'
+#' @returns a list of whether rot true
+#' @export
+#'
+check_pme_orientation <- function(init1, init2,
                                     pca_source = c("all_centers", "eight_corners"),
-                                    strict = TRUE,
                                     verbose = TRUE) {
   pca_source <- match.arg(pca_source)
 
@@ -132,10 +141,6 @@ check_init_by_joint_pca <- function(init1, init2,
     final = final,
     order1 = o1,
     order2 = o2,
-    strict_same = strict_same,
-    rot_same = rot_same,
-    mirror_same = mirror_same,
-    labels = c1$labels,
     corners1_UV01 = c1$UV4,
     corners2_UV01 = c2$UV4,
     corners1_XYZ = c1$XYZ4,
@@ -147,9 +152,8 @@ check_init_by_joint_pca <- function(init1, init2,
 
   if (isTRUE(verbose)) {
     message(sprintf(
-      "Joint-PCA corner check: final=%s | strict=%s rot=%s mirror=%s",
-      out$final, out$strict_same, out$rot_same, out$mirror_same
-    ))
+      "Joint-PCA corner check: final=%s",out$final)
+    )
   }
 
   out
