@@ -105,7 +105,7 @@ plot_surface_pair <- function(data1, data2,
                               opacity2 = 0.9,
                               title = "Simulated Surfaces (f1 & f2)") {
 
-
+  require(plotly)
   uv_scale   <- match.arg(uv_scale)
 
   # --- helper: min-max to [0,1] ---
@@ -183,6 +183,23 @@ plot_surface_pair <- function(data1, data2,
 
 
 
+#' Plot function for a pme manifold
+#'
+#' @param df embedding output, a list of points x,y,z
+#'
+#' @returns get a plot directly
+#' @export
+#'
+#' @examples
+#' make_uv_grid <- function(n = 100) {
+#'  u <- seq(-1, 2, length.out = n)
+#'  v <- seq(-1, 2, length.out = n)
+#'  grid <- expand.grid(u = u, v = v)
+#'  return(grid)
+#' }
+#'
+#' df_f1 <- evaluate_embedding(make_uv_grid(60), pme1.re$embedding_map)
+#' plotly_pointcloud(df_f1)
 plotly_pointcloud <- function(df) {
   plot_ly(
     x = df$x,
@@ -195,6 +212,24 @@ plotly_pointcloud <- function(df) {
 }
 
 
+#' Plot pme embedding and original points together
+#'
+#' @param X_original original points list
+#' @param df_embed embedding points list
+#' @param title plot title
+#'
+#' @returns a plot
+#'
+#' @examples
+#' make_uv_grid <- function(n = 100) {
+#'  u <- seq(-1, 2, length.out = n)
+#'  v <- seq(-1, 2, length.out = n)
+#'  grid <- expand.grid(u = u, v = v)
+#'  return(grid)
+#' }
+#'
+#' df_f1 <- evaluate_embedding(make_uv_grid(60), pme1.re$embedding_map)
+#' plot_pointcloud_pair(X_original = data_f1$XYZ,df_embed = df_f1,"f1")
 plot_pointcloud_pair <- function(X_original, df_embed,title=NULL) {
 
   fig <- plot_ly()
