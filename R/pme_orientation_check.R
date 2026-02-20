@@ -43,8 +43,10 @@
 .same_up_to_rotation <- function(a, b) {
   if (length(a) != length(b)) return(FALSE)
   n <- length(a)
+
   for (s in 0:(n-1)) {
-    if (all(a == c(b[(s+1):n], b[1:s]))) return(TRUE)
+    rhs <- b[( (1:n + s - 1) %% n ) + 1]
+    if (all(a == rhs)) return(TRUE)
   }
   FALSE
 }
