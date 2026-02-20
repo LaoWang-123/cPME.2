@@ -418,6 +418,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
         # 4) update cached f2 initialization using final f2_k
         #    IMPORTANT: use pme2$params_opt as init_params (your updated design)
+        #    Use the f2_warped to get centers' projection (parameters) and scale back to the original PME parameter scales
+        #    The original original parameter scale is better to fit a new PME
         private$.update_f2_initialization_from_f2k_inplace(
           f2k_fun = self$f2_warped,
           scale_f2 = self$scale_f2,
@@ -754,9 +756,9 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
         A <- scale_f2$A
         b <- scale_f2$b
-        new_params_back <- t(A %*% t(new_params_centers) + b)
+        new_params_back_toPME <- t(A %*% t(new_params_centers) + b)
 
-        self$initialization_f2$parameterization <- new_params_back
+        self$initialization_f2$parameterization <- new_params_back_toPME
         invisible(TRUE)
       },
 
