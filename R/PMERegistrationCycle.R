@@ -560,7 +560,7 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
 
           # save the result of our PME registration cycle
           if (!is.null(self$save_dir) && !is.null(self$filename)) {
-            private$.save_history_overwrite(save_dir=self$save_dir,filename=self$filename)
+            private$.save_all_overwrite(save_dir=self$save_dir,filename=self$filename)
           }
 
           if (stop_rule == "delta_E" && !is.null(tol_E)) {
@@ -808,6 +808,13 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
         if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
 
         saveRDS(self$history, file = file.path(save_dir, filename))
+        invisible(TRUE)
+      },
+
+      .save_all_overwrite = function(save_dir,filename) {
+        if (!dir.exists(save_dir)) dir.create(save_dir, recursive = TRUE)
+
+        saveRDS(self, file = file.path(save_dir, filename))
         invisible(TRUE)
       },
 
