@@ -177,7 +177,7 @@ projection_lpme <- function(x, f, initial_guess, n_knots, d_new, gamma) {
 #'
 #' @return A matrix of spline coefficients.
 #'
-#' @noRd
+#' @export
 calc_coefficients <- function(X, t, weights, w) {
   t_val <- cbind(rep(1, nrow(t)), t)
   E <- calcE(t, 4 - ncol(t))
