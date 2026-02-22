@@ -1,152 +1,215 @@
 # SIME code
-# Minimal SIME core loop:
-# - pme1: fixed reference pme, provides f1_fun = pme1$embedding_map
-# - init2: initialization list for pme2 side: centers, theta_hat, parameterization
-# - lambda, eta: given scalars
-# Returns: a pme-like object for updated f2 (plus history)
 
-#' SIME function with given eta, lambda, f1_fun and initialization of f2
+#' SIME with anchor penalty + lambda screening
 #'
-#' @param f1_fun f1 function with vector input
-#' @param init2 initialization of f2
-#' @param eta default 0.1
-#' @param lambda default given by f2 pme
-#' @param epsilon default 0.05
-#' @param max_iter default 100
-#' @param SSD_ratio_threshold default 5
-#' @param verbose default TRUE
+#' @param f1_fun f1 function with vector input (u -> R^3)
+#' @param init2 list: $centers (I x 3), $parameterization (I x 2),
+#'   $theta_hat (optional), $km (required for calc_msd)
+#' @param data2 raw data matrix (n x D) used in calc_msd (PME criterion)
+#' @param eta anchor weight (penalty strength)
+#' @param lambda tuning vector (can be length 1 or longer, like PME exp(-15:5))
+#' @param d intrinsic dimension (default 2 for surface)
+#' @param epsilon,max_iter,SSD_ratio_threshold same as PME loop controls
+#' @param verbose print_SSD like PME
 #'
-#' @returns de
+#' @returns list: optimal fit + full tuning path (MSD, coefs, parameterization, embeddings)
 #' @export
-#'
-sime_fit_minimal <- function(
+SIME <- function(
     f1_fun,
     init2,
-    eta=0.1,
-    lambda,
-    # loop control
-    epsilon = 0.05,
+    data2,
+    eta = 0.05,
+    lambda = exp(-15:5),
+    d = 2,
+    epsilon = 1,
     max_iter = 100,
     SSD_ratio_threshold = 5,
-    verbose = TRUE
+    verbose = FALSE
 ) {
+
+  if (!exists("calc_msd", mode = "function"))
+    stop("[SIMEpme] calc_msd() not found. Load PME utilities first.")
+  if (is.null(init2$km))
+    stop("[SIMEpme] init2$km is required for calc_msd().")
+
+  data2 <- as.matrix(data2)
+  D <- ncol(data2)
+
   # ----------------------------
-  # 0) Extract
+  # Extract init2
   # ----------------------------
   X2 <- as.matrix(init2$centers)                # I x 3
-  U2 <- as.matrix(init2$parameterization)       # I x 2
-  I  <- nrow(X2)
+  U2_init <- as.matrix(init2$parameterization)  # I x 2
+  I <- nrow(X2)
 
   theta <- init2$theta_hat
   if (is.null(theta)) theta <- rep(1, I)
   theta <- as.numeric(theta)
 
   # ----------------------------
-  # 1) Build anchors (fixed)
-  #    Ua fixed = init2 parameters
+  # Build anchors (fixed)
   # ----------------------------
-  Ua <- U2
+  Ua <- U2_init
   Xa <- t(apply(Ua, 1, function(u) as.numeric(f1_fun(as.numeric(u)))))  # I x 3
 
-  # combined dataset (data + anchor)
-  X_all <- rbind(X2, Xa)    # 2I x 3
+  X_all <- rbind(X2, Xa)                 # 2I x 3
+  weights_all <- diag(c(theta, rep(eta/I, I)))
+  I_all <- nrow(X_all)                   # 2I
 
-  # weights:
-  # - data term uses theta_hat
-  # - anchor penalty uses constant eta per anchor point
-  w_all <- c(theta, rep(eta, I))
-  W_all <- diag(w_all)
+  # storage like PME
+  mse <- vector()
+  coefs <- list()
+  parameterization <- list()
+  embeddings <- list()
 
   # ----------------------------
-  # 2) Embedding builder (same form as PME)
+  # PME-style tuning loop over lambda
   # ----------------------------
-  build_embedding <- function(spline_coefs, params_all) {
-    I_all <- nrow(params_all)  # should be 2I
-    d <- 2
-    function(u) {
-      u <- as.numeric(u)
+  for (tuning_idx in 1:length(lambda)) {
+
+    # params refers to *data params* (I x 2), like PME
+    params <- U2_init
+
+    # full params includes anchors (fixed)
+    params_all <- rbind(params, Ua)
+
+    spline_coefs <- calc_coefficients(
+      X_all,
+      params_all,
+      weights_all,
+      lambda[tuning_idx]
+    )
+
+    # embedding uses current spline_coefs + current params_all (like PME uses params)
+    f_embedding <- function(parameters) {
       as.vector(
-        (t(spline_coefs[1:I_all, , drop = FALSE]) %*% etaFunc(u, params_all, 4 - d)) +
+        (t(spline_coefs[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, params_all, 4 - d)) +
           (t(spline_coefs[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
-             matrix(c(1, u), ncol = 1))
+             matrix(c(1, parameters), ncol = 1))
       )
     }
-  }
 
-  # ----------------------------
-  # 3) Initialize f2 with current U2 (anchors fixed)
-  # ----------------------------
-  params_all <- rbind(U2, Ua)  # 2I x 2
-  I_all <- nrow(params_all)
+    f0 <- f_embedding
 
-  spline_coefs <- calc_coefficients(X_all, params_all, W_all, lambda)
-  f2_embedding <- build_embedding(spline_coefs, params_all)
-  U2 <- calc_params(f2_embedding, X2, U2, f_input = "vector")
+    # project ONLY centers X2 -> update params (anchors fixed)
+    params <- calc_params(f_embedding, X2, params, "vector")
+    params_all <- rbind(params, Ua)
 
-  # Need to consider whether to use those to calculate SSD
-  SSD <- calc_SSD(f2_embedding, X2, U2)
-  hist <- data.frame(iter = 0, SSD = SSD, SSD_ratio = NA_real_)
+    SSD <- calc_SSD(f_embedding, X2, params)
 
-  # ----------------------------
-  # 4) Main loop: update f2 coefs, then update ONLY U2 (project X2)
-  # ----------------------------
-  count <- 1
-  SSD_ratio <- 10 * epsilon
+    count <- 1
+    SSD_ratio <- 10 * epsilon
 
-  while ((SSD_ratio > epsilon) &&
-         (SSD_ratio <= SSD_ratio_threshold) &&
-         (count <= max_iter)) {
+    # PME-style inner loop
+    while ((SSD_ratio > epsilon) &
+           (SSD_ratio <= SSD_ratio_threshold) &
+           (count <= (max_iter - 1))) {
 
-    SSD_prev <- SSD
-    f_prev <- f2_embedding
-    U2_prev <- U2
-    coefs_prev <- spline_coefs
+      SSD_prev <- SSD
+      f0 <- f_embedding
+      params_prev <- params
+      coefs_prev <- spline_coefs
+      params_all_prev <- params_all
 
-    # (A) update embedding (Ua fixed)
-    params_all <- rbind(U2, Ua)
-    spline_coefs <- calc_coefficients(X_all, params_all, W_all, lambda)
-    f2_embedding <- build_embedding(spline_coefs, params_all)
+      # update coefs with UPDATED params_all (crucial PME pattern)
+      spline_coefs <- calc_coefficients(
+        X_all,
+        params_all,
+        weights_all,
+        lambda[tuning_idx]
+      )
 
-    # (B) update ONLY pme2 params (anchors fixed)
-    U2 <- calc_params(f2_embedding, X2, U2, f_input = "vector")
+      f_embedding <- function(parameters) {
+        as.vector(
+          (t(spline_coefs[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, params_all, 4 - d)) +
+            (t(spline_coefs[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
+               matrix(c(1, parameters), ncol = 1))
+        )
+      }
 
-    # recompute SSD (on combined set)
-    SSD <- calc_SSD(f2_embedding, X2, U2)
+      # update ONLY params (I x 2), anchors fixed
+      params <- calc_params(f_embedding, X2, params, "vector")
+      params_all <- rbind(params, Ua)
 
-    SSD_ratio <- abs(SSD - SSD_prev) / SSD_prev
-    hist <- rbind(hist, data.frame(iter = count, SSD = SSD, SSD_ratio = SSD_ratio))
+      SSD <- calc_SSD(f_embedding, X2, params)
+      SSD_ratio <- abs(SSD - SSD_prev) / SSD_prev
+      count <- count + 1
 
-    # same “blow-up rollback” pattern as PME
-    if (SSD_ratio > SSD_ratio_threshold) {
-      f2_embedding <- f_prev
-      U2 <- U2_prev
-      spline_coefs <- coefs_prev
-      SSD <- SSD_prev
-    }
+      # rollback like PME
+      if (SSD_ratio > SSD_ratio_threshold) {
+        f_embedding <- f0
+        params <- params_prev
+        params_all <- params_all_prev
+        spline_coefs <- coefs_prev
+        SSD <- SSD_prev
+      }
 
-    if (verbose) {
-      if (exists("print_SSD", mode = "function")) {
-        print_SSD(lambda, SSD, SSD_ratio, count)
-      } else {
-        message(sprintf("[SIME] iter=%d SSD=%.6g ratio=%.3g", count, SSD, SSD_ratio))
+      if (verbose == TRUE) {
+        if (exists("print_SSD", mode = "function")) {
+          print_SSD(lambda[tuning_idx], SSD, SSD_ratio, count)
+        } else {
+          message(sprintf("[SIME] lambda=%g SSD=%g ratio=%g iter=%d",
+                          lambda[tuning_idx], SSD, SSD_ratio, count))
+        }
       }
     }
 
-    count <- count + 1
+    # PME criterion: MSD on raw data
+    mse[tuning_idx] <- calc_msd(data2, init2$km, f_embedding, params, D, d) # Maybe need to check later
+
+    if (verbose == TRUE) {
+      message(sprintf("When lambda = %s, MSD = %s.",
+                      as.character(lambda[tuning_idx]),
+                      as.character(mse[tuning_idx])))
+    }
+
+    # store path objects like PME
+    coefs[[tuning_idx]] <- spline_coefs
+    parameterization[[tuning_idx]] <- params
+
+    embeddings[[tuning_idx]] <- function(parameters) {
+        as.vector(
+          (t(coefs[[tuning_idx]][1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(parameterization[[tuning_idx]], Ua), 4 - d)) +
+            (t(coefs[[tuning_idx]][(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
+               matrix(c(1, parameters), ncol = 1))
+        )
+      }
+
+
+    # PME early stop: last 4 MSD nondecreasing => break
+    if (tuning_idx >= 4) {
+      if (!is.unsorted(mse[(tuning_idx - 3):tuning_idx])) {
+        break
+      }
+    }
   }
 
-  # ----------------------------
-  # 5) Return minimal “pme-like” result
-  # ----------------------------
+  optimal_idx <- min(which(mse == min(mse)))
+
+  coefs_opt <- coefs[[optimal_idx]]
+  params_opt <- parameterization[[optimal_idx]]
+
+  embedding_opt <- function(parameters) {
+    as.vector(
+      (t(coefs_opt[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(params_opt, Ua), 4 - d)) +
+        (t(coefs_opt[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
+           matrix(c(1, parameters), ncol = 1))
+    )
+  }
+
+  # return pme-like + sime-specific extras
   list(
-    embedding_map = f2_embedding,
-    params_opt = U2,
+    embedding_map = embedding_opt,
+    params_opt = params_opt,
     centers = X2,
     theta_hat = theta,
     anchors = list(Ua = Ua, Xa = Xa, eta = eta),
-    tuning = lambda,
-    kernel_coefs = spline_coefs[1:I_all, , drop = FALSE],
-    polynomial_coefs = spline_coefs[(I_all + 1):(I_all + 3), , drop = FALSE], # d=2 => +3 rows
-    history = hist
+    knots = init2$km,
+    tuning = lambda[optimal_idx],
+    MSD = mse,
+    coefs = coefs,
+    parameterization = parameterization,
+    tuning_vec = lambda,
+    embeddings = embeddings
   )
 }
