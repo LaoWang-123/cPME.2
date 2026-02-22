@@ -219,7 +219,7 @@ calc_params <- function(f, X, init_params, f_input = c("vector", "uv")) {
 #'
 #' @return A numeric value.
 #'
-#' @noRd
+#' @export
 calc_SSD <- function(f, X, t) {
   SSD_val <- purrr::map(1:nrow(X), ~ dist_euclidean(X[.x, ], f(t[.x, ]))^2) %>%
     unlist() %>%
@@ -234,7 +234,7 @@ calc_SSD <- function(f, X, t) {
 #' @param SSD_ratio The ratio of the new and old SSD values.
 #' @param count The iteration number.
 #'
-#' @noRd
+#' @export
 print_SSD <- function(tuning_val, SSD_new, SSD_ratio, count) {
   print(
     paste0(
@@ -260,7 +260,7 @@ print_SSD <- function(tuning_val, SSD_new, SSD_ratio, count) {
 #' @param t A numeric matrix of the parameterization of the component centers.
 #' @param d The intrinsic dimension.
 #'
-#' @noRd
+#' @export
 plot_pme <- function(f, x, centers, sol, t, d) {
   # pred_grid <- calc_tnew(centers, t, sol, I, d, lambda)
   pred_grid <- calc_params(f, centers, t)
@@ -335,7 +335,7 @@ plot_pme <- function(f, x, centers, sol, t, d) {
 #'
 #' @return A numeric value.
 #'
-#' @noRd
+#' @export
 calc_msd <- function(x, km, f, t, D, d) {
   data_initial <- matrix(0, nrow = 1, ncol = D + d)
   center_order <- order(km$centers[, 1])
