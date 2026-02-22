@@ -5,10 +5,24 @@
 # - lambda, eta: given scalars
 # Returns: a pme-like object for updated f2 (plus history)
 
+#' SIME function with given eta, lambda, f1_fun and initialization of f2
+#'
+#' @param f1_fun f1 function with vector input
+#' @param init2 initialization of f2
+#' @param eta default 0.1
+#' @param lambda default given by f2 pme
+#' @param epsilon default 0.05
+#' @param max_iter default 100
+#' @param SSD_ratio_threshold default 5
+#' @param verbose default TRUE
+#'
+#' @returns de
+#' @export
+#'
 sime_fit_minimal <- function(
-    pme1,
+    f1_fun,
     init2,
-    eta,
+    eta=0.1,
     lambda,
     # loop control
     epsilon = 0.05,
@@ -19,8 +33,6 @@ sime_fit_minimal <- function(
   # ----------------------------
   # 0) Extract
   # ----------------------------
-  f1_fun <- pme1$embedding_map
-
   X2 <- as.matrix(init2$centers)                # I x 3
   U2 <- as.matrix(init2$parameterization)       # I x 2
   I  <- nrow(X2)
@@ -72,7 +84,7 @@ sime_fit_minimal <- function(
   U2 <- calc_params(f2_embedding, X2, U2, f_input = "vector")
 
   # Need to consider whether to use those to calculate SSD
-  SSD <- calc_SSD(f2_fun, X2, U2)
+  SSD <- calc_SSD(f2_embedding, X2, U2)
   hist <- data.frame(iter = 0, SSD = SSD, SSD_ratio = NA_real_)
 
   # ----------------------------
