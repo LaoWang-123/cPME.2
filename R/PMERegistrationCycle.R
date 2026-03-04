@@ -687,14 +687,14 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
             private$.save_all_overwrite(save_dir=self$save_dir,filename=self$filename)
           }
 
-          if (stop_rule == "delta_E" && !is.null(tol_E)) {
-            if (private$.check_convergence_delta_E()) {
-              self$converged <- TRUE
-              self$stop_reason <- sprintf("delta_E < 0")
-              break
+
+          if (private$.check_convergence_delta_E()) {
+            self$converged <- TRUE
+            self$stop_reason <- sprintf("delta_E < 0")
+            break
             }
           }
-        }
+
 
         invisible(self)
       }
