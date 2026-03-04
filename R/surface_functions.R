@@ -1,3 +1,5 @@
+######## This file is mostly used for the surface consturction for simulations in registration
+
 # ==========================================================
 # γ function factory —  "smooth" / "rotate" / "identity"
 # ==========================================================
@@ -161,95 +163,6 @@ grad_f_bowl <- function(u, v, R = 1.0, c = 1.5) {
 
 
 
-# We define the bowl surface function and gamma function from surface_functions.R
-# ==========================================================
-# Generate simulated surface data
-# ==========================================================
-#' Generate simulated surface data
-#'
-#' @param f surface function, (u,v) input and (x,y,z) output
-#' @param uv_grid a data.frame with u,v columns
-#' @param n_u default = 50
-#' @param n_v default = 50
-#' @param noise_sd default = 0
-#' @param seed default = NULL
-#' @param f_input  c("auto", "uv", "vector")
-#'
-#' @returns a list of data to generate plots
-#' @export
-#'
-#' @examples
-#' data_f1 <- generate_surface_data(f1, n_u = 60, n_v = 60, noise_sd = 0, seed = 123) # R=1.2
-generate_surface_data <- function(f,
-                                  uv_grid = NULL,
-                                  n_u = 50,
-                                  n_v = 50,
-                                  noise_sd = 0,
-                                  seed = NULL,
-                                  f_input = c("auto", "uv", "vector")) {
-  f_input <- match.arg(f_input)
-
-  # Optional reproducibility
-  if (!is.null(seed)) set.seed(seed)
-
-  if(is.null(uv_grid)){
-    # Generate UV grid
-    u_seq <- seq(0, 1, length.out = n_u)
-    v_seq <- seq(0, 1, length.out = n_v)
-    uv_grid <- expand.grid(u = u_seq, v = v_seq)
-  }
-
-  f_use <- switch(
-    f_input,
-    "uv" = function(uv) {
-      uv <- as.numeric(uv)
-      f(uv[1], uv[2])
-    },
-    "vector" = function(uv) {
-      uv <- as.numeric(uv)
-      f(uv)
-    },
-    "auto" = function(uv) {
-      uv <- as.numeric(uv)
-      tryCatch(
-        f(uv[1], uv[2]),
-        error = function(e) f(uv)
-      )
-    }
-  )
-
-
-  # Evaluate surface function f(u, v)
-  xyz <- t(apply(uv_grid, 1, f_use))
-  colnames(xyz) <- c("x", "y", "z")
-
-  # Add Gaussian noise if needed
-  if (noise_sd > 0) {
-    xyz <- xyz + matrix(rnorm(length(xyz), sd = noise_sd), ncol = 3)
-  }
-
-  # Combine results into a list
-  data_list <- list(
-    UV_grid = uv_grid,
-    XYZ = xyz,
-    n_points = nrow(uv_grid),
-    noise_sd = noise_sd
-  )
-
-  class(data_list) <- "surface_data"
-  return(data_list)
-}
-
-# Example usage:
-# ==========================================================
-# generate one dataset for f1 and f2
-# ==========================================================
-# data_f1 <- generate_surface_data(f1, n_u = 60, n_v = 60, noise_sd = 0, seed = 123) # R=1.2
-# data_f2 <- generate_surface_data(f2, n_u = 60, n_v = 60, noise_sd = 0, seed = 123) # R=1
-#
-# # Inspect results
-# str(data_f1)
-# head(data_f1$XYZ)
 
 
 ################################################################################################################
