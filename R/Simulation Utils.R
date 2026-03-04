@@ -1,5 +1,13 @@
 ### Simulation Datasets
 
+#' Translate surface with a vector
+#'
+#' @param f u,v input function
+#' @param translate translate vector
+#'
+#' @returns a translated function
+#' @export
+#'
 translate_surface_function <- function(f, translate = c(0,0,0)) {
   stopifnot(is.numeric(translate), length(translate) == 3)
 
@@ -44,36 +52,6 @@ make_uv_grid <- function(n_u = 60, n_v = 60,
   uv
 }
 
-# ==========================================================
-# bowl function
-# ==========================================================
-
-#' Make bowl surface function
-#'
-#' @param R 1
-#' @param c 1.5
-#' @param p 1
-#' @param flip 1
-#'
-#' @returns a function with (u,v) input
-#' @export
-#'
-make_bowl_surface_function <- function(R = 1.0, c = 1.5, p = 1.0, flip = 1) {
-
-  f_bowl <- function(uv, R = 1.0, c = 1.5, p = 1.0, flip = 1) {
-    u <- uv[,1]; v <- uv[,2]
-    x <- (2*u - 1) * R
-    y <- (2*v - 1) * R
-    r2 <- ((2*u - 1)^2 + (2*v - 1)^2)
-    z  <- flip * c * (r2^p)
-    cbind(x, y, z)
-  }
-
-  function(u, v) {
-    uv <- cbind(u, v)
-    f_bowl(uv, R = R, c = c, p = p, flip = flip)
-  }
-}
 
 
 # We define the bowl surface function and gamma function from surface_functions.R
@@ -163,31 +141,4 @@ generate_surface_data <- function(f,
   return(data_list)
 }
 
-translate_surface_function <- function(f, translate = c(0,0,0)) {
-  stopifnot(is.numeric(translate), length(translate) == 3)
-  function(u, v) {
-    xyz <- f(u, v)
-    sweep(xyz, 2, translate, "+")
-  }
-}
 
-generate_two_surface_simulation <- function(
-    f1,
-    f2,
-    translate2 = c(0, 0, 0),   # ONLY translate surface2
-    uv_grid = NULL,
-    uv_common = list(n_u = 60, n_v = 60, grid_type = "disk", center = c(0.5,0.5), radius = 0.5),
-    noise1_sd = 0,
-    noise2_sd = 0,
-    seed = 123
-) {
-
-  if (is.null(uv_grid)) uv_grid <- do.call(make_uv_grid, uv_common)
-
-  f2_use <- translate_surface_function(f2, translate = translate2)
-
-  data1 <- generate_surface_data(f1,     uv_grid = uv_grid, noise_sd = noise1_sd, seed = seed)
-  data2 <- generate_surface_data(f2_use, uv_grid = uv_grid, noise_sd = noise2_sd, seed = seed)
-
-  list(surface1 = data1, surface2 = data2, seed = seed, translate2=translate2)
-}
