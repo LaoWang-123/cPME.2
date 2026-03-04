@@ -324,8 +324,6 @@ stopping rule.
   n_cycles = 5,
   save_dir = NULL,
   filename = NULL,
-  tol_E = NULL,
-  stop_rule = c("none", "delta_E"),
   reinit = FALSE
 )}\if{html}{\out{</div>}}
 }
@@ -340,13 +338,6 @@ for saving intermediate states.}
 
 \item{\code{filename}}{Optional character string specifying the filename
 used when saving registration state.}
-
-\item{\code{tol_E}}{Optional numeric tolerance used when
-\code{stop_rule = "delta_E"}.}
-
-\item{\code{stop_rule}}{Character string specifying the stopping criterion.
-One of \code{"none"} (no early stopping) or
-\code{"delta_E"} (stop when energy change is below \code{tol_E}).}
 
 \item{\code{reinit}}{Logical. If \code{TRUE}, resets the internal state
 and refits the initial PME models before running cycles.}

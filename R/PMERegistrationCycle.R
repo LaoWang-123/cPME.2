@@ -603,11 +603,6 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       #'        for saving intermediate states.
       #' @param filename Optional character string specifying the filename
       #'        used when saving registration state.
-      #' @param tol_E Optional numeric tolerance used when
-      #'        \code{stop_rule = "delta_E"}.
-      #' @param stop_rule Character string specifying the stopping criterion.
-      #'        One of \code{"none"} (no early stopping) or
-      #'        \code{"delta_E"} (stop when energy change is below \code{tol_E}).
       #' @param reinit Logical. If \code{TRUE}, resets the internal state
       #'        and refits the initial PME models before running cycles.
       #'
@@ -621,11 +616,8 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
       n_cycles = 5,
       save_dir = NULL,
       filename = NULL,
-      tol_E = NULL,
-      stop_rule = c("none", "delta_E"),
       reinit = FALSE
       ) {
-        stop_rule <- match.arg(stop_rule)
         # ---- how many cycles already completed? ----
         completed <- length(self$history$cycles)
         start_cycle <- completed + 1L
@@ -687,13 +679,19 @@ PMERegistrationCycle <- R6::R6Class(classname = "PMERegistrationCycle",
             private$.save_all_overwrite(save_dir=self$save_dir,filename=self$filename)
           }
 
-
+          # stop if delta_E < 0 across cycles
           if (private$.check_convergence_delta_E()) {
             self$converged <- TRUE
             self$stop_reason <- sprintf("delta_E < 0")
             break
-            }
           }
+          # stop if registration already converged
+          if (length(self$reg$E_history) < self$reg$max_iter + 1) {
+            cat("[PMEReg] early convergence detected, stop further cycles\n")
+            break
+          }
+
+        }
 
 
         invisible(self)
