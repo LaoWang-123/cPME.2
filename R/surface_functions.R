@@ -168,6 +168,33 @@ make_bowl_surface_function <- function(R = 1.0, c = 1.5, p = 1.0, flip = 1) {
 }
 
 
+#' Make saddle surface function
+#'
+#' @param R 1
+#' @param c 1.5
+#' @param flip 1
+#'
+#' @returns saddle surface function with u,v input
+#' @export
+make_saddle_surface_function <- function(R = 1.0, c = 1.5, flip = 1) {
+
+  f_saddle <- function(uv, R = 1.0, c = 1.5, flip = 1) {
+    u <- uv[,1]; v <- uv[,2]
+
+    x <- (2*u - 1) * R
+    y <- (2*v - 1) * R
+
+    z <- flip * c * (x^2 - y^2)
+
+    cbind(x, y, z)
+  }
+
+  function(u, v) {
+    uv <- cbind(u, v)
+    f_saddle(uv, R = R, c = c, flip = flip)
+  }
+}
+
 ###### Example
 # # f_m (rotate reparam)
 # f1 <- make_surface_function(R = 1.2,gamma_mode = "rotate")
