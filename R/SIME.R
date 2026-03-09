@@ -1,6 +1,7 @@
 # SIME code
 
 #' SIME with anchor penalty + lambda screening
+#' This code is run with given eta and chose lambda automatically
 #'
 #' @param f1_fun f1 function with vector input (u -> R^3)
 #' @param init2 list: $centers (I x 3), $parameterization (I x 2),
@@ -211,5 +212,270 @@ SIME <- function(
     parameterization = parameterization,
     tuning_vec = lambda,
     embeddings = embeddings
+  )
+}
+
+
+
+############################################################
+## Validation projection MSD
+############################################################
+calc_validation_proj_msd <- function(val_data, fit_obj) {
+  val_data <- as.matrix(val_data)
+  if (nrow(val_data) == 0) return(NA_real_)
+  embedding_map <- fit_obj$embedding_map
+
+  # calc_params with pca initialization
+  init_params_val <- pme_initial_guess(X = val_data, d = 2, method = "pca")
+
+  val_params_opt <- calc_params(
+    f = embedding_map,
+    X = val_data,
+    init_params = init_params_val,
+    f_input = "vector"
+  )
+
+  val_proj <- t(apply(val_params_opt, 1, function(u) {
+    as.numeric(embedding_map(as.numeric(u)))
+  }))
+
+  mean(rowSums((val_data - val_proj)^2))
+}
+
+
+############################################################
+## CV over eta, with fold-specific init2 precomputed once
+############################################################
+SIME_cv <- function(
+    f1_fun,
+    f2_fun,
+    data2,
+    eta_vec,
+    lambda = exp(-15:5),
+    K = 5,
+    d = 2,
+    epsilon = 1,
+    max_iter = 100,
+    SSD_ratio_threshold = 5,
+    init_args_f2 = list(
+      min_clusters = 10,
+      alpha = 0.01,
+      max_clusters = 100,
+      algorithm = "isomap",
+      rescale = FALSE,
+      component_type = "centers",
+      subsample_size = 5,
+      d=2
+    ),
+    seed = NULL,
+    verbose = TRUE
+) {
+  data2 <- as.matrix(data2)
+  n <- nrow(data2)
+
+  if (length(eta_vec) < 1) stop("eta_vec must contain at least one value.")
+  if (K < 2) stop("K must be at least 2.")
+  if (n < K) stop("n must be >= K.")
+
+  if (!is.null(seed)) set.seed(seed)
+
+  ##########################################################
+  ## Make folds once
+  ##########################################################
+  perm <- sample(seq_len(n))
+  fold_id <- rep(seq_len(K), length.out = n)
+  folds <- split(perm, fold_id)
+
+  ##########################################################
+  ## Precompute train/val split and init2 for each fold once
+  ##########################################################
+  train_data_list <- vector("list", K)
+  val_data_list   <- vector("list", K)
+  init2_list      <- vector("list", K)
+
+  for (k in seq_len(K)) {
+    val_idx <- folds[[k]]
+    train_idx <- setdiff(seq_len(n), val_idx)
+
+    train_data_list[[k]] <- data2[train_idx, , drop = FALSE]
+    val_data_list[[k]]   <- data2[val_idx, , drop = FALSE]
+
+    if (verbose) {
+      message("==================================================")
+      message(sprintf("Precomputing init2 for fold %d", k))
+      message("==================================================")
+    }
+
+    init2_k <- do.call(
+      initialize_pme,
+      c(list(x = train_data_list[[k]]),
+        init_args_f2)
+    )
+
+    init2_k$parameterization <- calc_params(
+      f = f2_fun,
+      X = init2_k$centers,
+      init_params = init2_k$parameterization,
+      f_input = "uv"
+    )
+
+    init2_list[[k]] <- init2_k
+  }
+
+  ##########################################################
+  ## Storage over eta
+  ##########################################################
+  eta_mean_msd <- rep(NA_real_, length(eta_vec))
+  eta_fold_msd <- vector("list", length(eta_vec))
+  eta_lambda_star <- rep(NA_real_, length(eta_vec))
+
+  ##########################################################
+  ## Loop over eta
+  ##########################################################
+  for (e in seq_along(eta_vec)) {
+    eta_now <- eta_vec[e]
+
+    if (verbose) {
+      message("==================================================")
+      message(sprintf("Evaluating eta = %g", eta_now))
+      message("==================================================")
+    }
+
+    fold_msd <- rep(NA_real_, K)
+
+    #######################################################
+    ## Fold 1: full lambda vector, let SIME choose lambda
+    #######################################################
+    if (verbose) {
+      message(sprintf("eta = %g, fold 1: running full lambda grid", eta_now))
+    }
+
+    fit1 <- SIME(
+      f1_fun = f1_fun,
+      init2 = init2_list[[1]],
+      data2 = train_data_list[[1]],
+      eta = eta_now,
+      lambda = lambda,
+      d = d,
+      epsilon = epsilon,
+      max_iter = max_iter,
+      SSD_ratio_threshold = SSD_ratio_threshold,
+      verbose = verbose
+    )
+
+    lambda_star <- fit1$tuning
+    fold_msd[1] <- calc_validation_proj_msd(val_data_list[[1]], fit1)
+
+    eta_lambda_star[e] <- lambda_star
+
+    if (verbose) {
+      message(sprintf(
+        "eta = %g, fold 1 selected lambda = %g, val MSD = %g",
+        eta_now, lambda_star, fold_msd[1]
+      ))
+    }
+
+    #######################################################
+    ## Folds 2..K: fixed lambda_star
+    #######################################################
+    if (K >= 2) {
+      for (k in 2:K) {
+        if (verbose) {
+          message(sprintf(
+            "eta = %g, fold %d: running fixed lambda = %g",
+            eta_now, k, lambda_star
+          ))
+        }
+
+        fit_k <- SIME(
+          f1_fun = f1_fun,
+          init2 = init2_list[[k]],
+          data2 = train_data_list[[k]],
+          eta = eta_now,
+          lambda = lambda_star,
+          d = d,
+          epsilon = epsilon,
+          max_iter = max_iter,
+          SSD_ratio_threshold = SSD_ratio_threshold,
+          verbose = verbose
+        )
+
+        fold_msd[k] <- calc_validation_proj_msd(val_data_list[[k]], fit_k)
+
+        if (verbose) {
+          message(sprintf(
+            "eta = %g, fold %d: val MSD = %g",
+            eta_now, k, fold_msd[k]
+          ))
+        }
+      }
+    }
+
+    eta_fold_msd[[e]] <- fold_msd
+    eta_mean_msd[e] <- mean(fold_msd, na.rm = TRUE)
+
+    if (verbose) {
+      message(sprintf(
+        "eta = %g, mean CV MSD = %g",
+        eta_now, eta_mean_msd[e]
+      ))
+    }
+  }
+
+  ##########################################################
+  ## Select best eta
+  ##########################################################
+  best_eta_idx <- which.min(eta_mean_msd)
+  best_eta <- eta_vec[best_eta_idx]
+  best_lambda <- eta_lambda_star[best_eta_idx]
+
+  if (verbose) {
+    message("==================================================")
+    message(sprintf("Best eta = %g", best_eta))
+    message(sprintf("Corresponding lambda = %g", best_lambda))
+    message("==================================================")
+  }
+
+  ##########################################################
+  ## Final refit on full data
+  ##########################################################
+  init2_full <- do.call(
+    initialize_pme,
+    c(list(x = data2),
+      init_args_f2)
+  )
+
+  init2_full$parameterization <- calc_params(
+    f = f2_fun,
+    X = init2_full$centers,
+    init_params = init2_full$parameterization,
+    f_input = "uv"
+  )
+
+  final_fit <- SIME(
+    f1_fun = f1_fun,
+    init2 = init2_full,
+    data2 = data2,
+    eta = best_eta,
+    lambda = best_lambda,
+    d = d,
+    epsilon = epsilon,
+    max_iter = max_iter,
+    SSD_ratio_threshold = SSD_ratio_threshold,
+    verbose = verbose
+  )
+
+  list(
+    folds = folds,
+    train_data_list = train_data_list,
+    val_data_list = val_data_list,
+    init2_list = init2_list,
+    eta_vec = eta_vec,
+    lambda_grid = lambda,
+    eta_mean_msd = eta_mean_msd,
+    eta_fold_msd = eta_fold_msd,
+    eta_lambda_star = eta_lambda_star,
+    best_eta = best_eta,
+    SIME_final = final_fit
   )
 }

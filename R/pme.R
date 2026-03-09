@@ -304,7 +304,7 @@ is_pme <- function(x) {
 #' @export
 initialize_pme <- function(x, d, min_clusters, alpha, max_clusters,
                            component_type = "centers", algorithm = "isomap",
-                           subsample_size = 5,rescale = TRUE) {
+                           subsample_size = 5,rescale = FALSE) {
   est <- hdmde_mod(x, min_clusters, alpha, max_clusters)
   if (component_type == "subsample") {
     cluster_points <- matrix(nrow = 1, ncol = ncol(x))
