@@ -338,7 +338,7 @@ SIME_cv <- function(
     f1_fun,
     f2_fun,
     data2,
-    eta_vec,
+    eta_vec = exp(-15:5),
     lambda = exp(-15:5),
     K = 5,
     d = 2,
@@ -508,12 +508,24 @@ SIME_cv <- function(
         eta_now, eta_mean_msd[e]
       ))
     }
+
+    #######################################################
+    ## Early stop over eta: last 4 mean CV MSD nondecreasing
+    #######################################################
+    if (e >= 4) {
+      if (!is.unsorted(eta_mean_msd[(e - 3):e])) {
+        if (verbose) {
+          message("Early stopping on eta: last 4 mean CV MSD values are nondecreasing.")
+        }
+        break
+      }
+    }
   }
 
   ##########################################################
   ## Select best eta
   ##########################################################
-  best_eta_idx <- which.min(eta_mean_msd)
+  best_eta_idx <- min(which(eta_mean_msd == min(eta_mean_msd, na.rm = TRUE)))
   best_eta <- eta_vec[best_eta_idx]
   best_lambda <- eta_lambda_star[best_eta_idx]
 

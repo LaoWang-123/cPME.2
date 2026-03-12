@@ -8,7 +8,7 @@ SIME_cv(
   f1_fun,
   f2_fun,
   data2,
-  eta_vec,
+  eta_vec = exp(-15:5),
   lambda = exp(-15:5),
   K = 5,
   d = 2,
