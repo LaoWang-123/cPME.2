@@ -268,7 +268,7 @@ calc_validation_proj_msd <- function(val_data, fit_obj) {
 #'   obtained from MRI PME). Takes a parameter vector \eqn{u} and returns a
 #'   point in the ambient space.
 #'
-#' @param f2_fun Function representing the current PET manifold estimate used
+#' @param f2_fun Function representing the current PET manifold estimate (eta=0) used
 #'   to update the parameterization of initialization centers.
 #'
 #' @param data2 A numeric matrix of observations used to fit the PET manifold.

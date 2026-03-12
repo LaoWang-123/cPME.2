@@ -26,7 +26,7 @@ SIME_cv(
 obtained from MRI PME). Takes a parameter vector \eqn{u} and returns a
 point in the ambient space.}
 
-\item{f2_fun}{Function representing the current PET manifold estimate used
+\item{f2_fun}{Function representing the current PET manifold estimate (eta=0) used
 to update the parameterization of initialization centers.}
 
 \item{data2}{A numeric matrix of observations used to fit the PET manifold.
