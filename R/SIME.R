@@ -243,9 +243,97 @@ calc_validation_proj_msd <- function(val_data, fit_obj) {
 }
 
 
-############################################################
-## CV over eta, with fold-specific init2 precomputed once
-############################################################
+#' Cross-validation selection of the structural weight \eqn{\eta} for SIME
+#'
+#' Performs K-fold cross-validation to select the optimal structural weight
+#' \eqn{\eta} for the SIME (Structure-Informed Manifold Estimation) model.
+#' For each candidate \eqn{\eta}, the procedure:
+#'
+#' \enumerate{
+#' \item Splits the data into K folds.
+#' \item For each fold, initializes the PME manifold using \code{initialize_pme()}.
+#' \item On the first fold, runs \code{SIME()} with the full \code{lambda} grid
+#'       to determine the optimal smoothing parameter.
+#' \item Uses this selected \code{lambda} for the remaining folds to reduce
+#'       computation time.
+#' \item Computes validation projection MSD (mean squared distance) between
+#'       validation data and the fitted manifold.
+#' }
+#'
+#' The \eqn{\eta} with the smallest average validation MSD is selected, and the
+#' final SIME model is refit on the full dataset using the selected
+#' \eqn{\eta} and corresponding \code{lambda}.
+#'
+#' @param f1_fun Function representing the reference manifold (typically
+#'   obtained from MRI PME). Takes a parameter vector \eqn{u} and returns a
+#'   point in the ambient space.
+#'
+#' @param f2_fun Function representing the current PET manifold estimate used
+#'   to update the parameterization of initialization centers.
+#'
+#' @param data2 A numeric matrix of observations used to fit the PET manifold.
+#'   Rows correspond to data points and columns correspond to ambient
+#'   coordinates.
+#'
+#' @param eta_vec Numeric vector of candidate \eqn{\eta} values controlling the
+#'   strength of structural anchoring toward \code{f1_fun}.
+#'
+#' @param lambda Numeric vector of smoothing parameters used by \code{SIME()}.
+#'   The first fold selects the optimal value.
+#'
+#' @param K Integer. Number of cross-validation folds.
+#'
+#' @param d Intrinsic dimension of the manifold (default = 2).
+#'
+#' @param epsilon Convergence threshold for the inner SIME optimization loop.
+#'
+#' @param max_iter Maximum number of iterations allowed in the SIME fitting
+#'   procedure.
+#'
+#' @param SSD_ratio_threshold Threshold used for stability control during
+#'   the SIME optimization iterations.
+#'
+#' @param init_args_f2 A list of arguments passed to \code{initialize_pme()}
+#'   when generating fold-specific manifold initializations.
+#'
+#' @param seed Optional random seed used for reproducible fold assignment.
+#'
+#' @param verbose Logical. If TRUE, prints progress messages during
+#'   cross-validation.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{best_eta}{Selected value of \eqn{\eta}.}
+#'   \item{best_lambda}{Selected smoothing parameter.}
+#'   \item{eta_mean_msd}{Average validation MSD for each candidate \eqn{\eta}.}
+#'   \item{eta_fold_msd}{Fold-wise validation MSD values.}
+#'   \item{eta_lambda_star}{Selected \code{lambda} for each \eqn{\eta}.}
+#'   \item{final_fit}{Final SIME model fitted on the full dataset.}
+#' }
+#'
+#' @details
+#' Initialization is performed once per fold using \code{initialize_pme()} and
+#' reused across candidate \eqn{\eta} values to avoid redundant computation.
+#'
+#' Validation error is measured using projection mean squared distance (MSD),
+#' computed by projecting validation points onto the fitted manifold.
+#'
+#' @examples
+#' \dontrun{
+#' cv_fit <- SIME_cv(
+#'   f1_fun = f1_fun,
+#'   f2_fun = f2_fun,
+#'   data2 = data2,
+#'   eta_vec = c(0.01, 0.05, 0.1, 0.5),
+#'   lambda = exp(-15:5),
+#'   K = 5
+#' )
+#'
+#' cv_fit$best_eta
+#' cv_fit$best_lambda
+#' }
+#'
+#' @export
 SIME_cv <- function(
     f1_fun,
     f2_fun,

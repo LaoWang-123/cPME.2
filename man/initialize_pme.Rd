@@ -13,7 +13,7 @@ initialize_pme(
   component_type = "centers",
   algorithm = "isomap",
   subsample_size = 5,
-  rescale = TRUE
+  rescale = FALSE
 )
 }
 \arguments{

@@ -2,7 +2,8 @@
 % Please edit documentation in R/SIME.R
 \name{SIME}
 \alias{SIME}
-\title{SIME with anchor penalty + lambda screening}
+\title{SIME with anchor penalty + lambda screening
+This code is run with given eta and chose lambda automatically}
 \usage{
 SIME(
   f1_fun,
@@ -40,4 +41,5 @@ list: optimal fit + full tuning path (MSD, coefs, parameterization, embeddings)
 }
 \description{
 SIME with anchor penalty + lambda screening
+This code is run with given eta and chose lambda automatically
 }
