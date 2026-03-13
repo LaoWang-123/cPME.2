@@ -10,7 +10,7 @@ SIME_cv(
   data2,
   eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
   lambda = exp(-15:5),
-  K = 5,
+  K = 10,
   d = 2,
   epsilon = 1,
   max_iter = 100,

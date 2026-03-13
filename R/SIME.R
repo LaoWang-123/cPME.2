@@ -340,7 +340,7 @@ SIME_cv <- function(
     data2,
     eta_vec = c(exp(-15:-2),0.1,exp(-1:5)),
     lambda = exp(-15:5),
-    K = 5,
+    K = 10,
     d = 2,
     epsilon = 1,
     max_iter = 100,
@@ -388,12 +388,6 @@ SIME_cv <- function(
     train_data_list[[k]] <- data2[train_idx, , drop = FALSE]
     val_data_list[[k]]   <- data2[val_idx, , drop = FALSE]
 
-    if (verbose) {
-      message("==================================================")
-      message(sprintf("Precomputing init2 for fold %d", k))
-      message("==================================================")
-    }
-
     init2_k <- do.call(
       initialize_pme,
       c(list(x = train_data_list[[k]]),
@@ -410,6 +404,12 @@ SIME_cv <- function(
     init2_list[[k]] <- init2_k
   }
 
+
+  if (verbose) {
+    message("==================================================")
+    message(sprintf("Precomputing init2 for %d folds", K))
+    message("==================================================")
+  }
   ##########################################################
   ## Storage over eta
   ##########################################################
@@ -434,10 +434,6 @@ SIME_cv <- function(
     #######################################################
     ## Fold 1: full lambda vector, let SIME choose lambda
     #######################################################
-    if (verbose) {
-      message(sprintf("eta = %g, fold 1: running full lambda grid", eta_now))
-    }
-
     fit1 <- SIME(
       f1_fun = f1_fun,
       init2 = init2_list[[1]],
@@ -468,12 +464,12 @@ SIME_cv <- function(
     #######################################################
     if (K >= 2) {
       for (k in 2:K) {
-        if (verbose) {
-          message(sprintf(
-            "eta = %g, fold %d: running fixed lambda = %g",
-            eta_now, k, lambda_star
-          ))
-        }
+        # if (verbose) {
+        #   message(sprintf(
+        #     "eta = %g, fold %d: running fixed lambda = %g",
+        #     eta_now, k, lambda_star
+        #   ))
+        # }
 
         fit_k <- SIME(
           f1_fun = f1_fun,
@@ -490,12 +486,12 @@ SIME_cv <- function(
 
         fold_msd[k] <- calc_validation_proj_msd(val_data_list[[k]], fit_k)
 
-        if (verbose) {
-          message(sprintf(
-            "eta = %g, fold %d: val MSD = %g",
-            eta_now, k, fold_msd[k]
-          ))
-        }
+        # if (verbose) {
+        #   message(sprintf(
+        #     "eta = %g, fold %d: val MSD = %g",
+        #     eta_now, k, fold_msd[k]
+        #   ))
+        # }
       }
     }
 
