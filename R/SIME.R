@@ -338,7 +338,7 @@ SIME_cv <- function(
     f1_fun,
     f2_fun,
     data2,
-    eta_vec = c(exp(-15:-2),0.1,exp(-1,5)),
+    eta_vec = c(exp(-15:-2),0.1,exp(-1:5)),
     lambda = exp(-15:5),
     K = 5,
     d = 2,
