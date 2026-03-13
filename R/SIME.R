@@ -404,7 +404,7 @@ SIME_cv <- function(
       f = f2_fun,
       X = init2_k$centers,
       init_params = init2_k$parameterization,
-      f_input = "uv"
+      f_input = "vector" # the f2_fun come from pme_embedding function directly, so it is vector.
     )
 
     init2_list[[k]] <- init2_k
@@ -549,7 +549,7 @@ SIME_cv <- function(
     f = f2_fun,
     X = init2_full$centers,
     init_params = init2_full$parameterization,
-    f_input = "uv"
+    f_input = "vector"
   )
 
   final_fit <- SIME(
