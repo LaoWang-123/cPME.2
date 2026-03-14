@@ -444,7 +444,7 @@ SIME_cv <- function(
       epsilon = epsilon,
       max_iter = max_iter,
       SSD_ratio_threshold = SSD_ratio_threshold,
-      verbose = verbose
+      verbose = FALSE
     )
 
     lambda_star <- fit1$tuning
@@ -481,7 +481,7 @@ SIME_cv <- function(
           epsilon = epsilon,
           max_iter = max_iter,
           SSD_ratio_threshold = SSD_ratio_threshold,
-          verbose = verbose
+          verbose = FALSE
         )
 
         fold_msd[k] <- calc_validation_proj_msd(val_data_list[[k]], fit_k)
