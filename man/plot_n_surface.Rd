@@ -8,11 +8,12 @@ plot_n_surface(
   data_list,
   uv_scale = c("global", "each"),
   opacities = NULL,
-  names = NULL,
+  legend_labels = NULL,
   marker_size = 3,
   title = "Simulated Surfaces",
   show_legend = TRUE,
-  legend_bg = "rgba(255,255,255,0.6)"
+  legend_bg = "rgba(255,255,255,0.6)",
+  fix_axis = TRUE
 )
 }
 \arguments{
@@ -22,7 +23,7 @@ plot_n_surface(
 
 \item{opacities}{a vector of values}
 
-\item{names}{Surface Name}
+\item{legend_labels}{Surface Name}
 
 \item{marker_size}{default 3}
 
@@ -31,6 +32,8 @@ plot_n_surface(
 \item{show_legend}{TRUE}
 
 \item{legend_bg}{"rgba(255,255,255,0.6)"}
+
+\item{fix_axis}{TRUE}
 }
 \value{
 Surface Plots
