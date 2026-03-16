@@ -2,7 +2,7 @@
 % Please edit documentation in R/visualize.R
 \name{plot_n_surface}
 \alias{plot_n_surface}
-\title{Title}
+\title{Plot a list of surfaces together}
 \usage{
 plot_n_surface(
   data_list,
@@ -39,5 +39,5 @@ plot_n_surface(
 Surface Plots
 }
 \description{
-Title
+Plot a list of surfaces together
 }
