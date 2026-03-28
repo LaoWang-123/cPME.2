@@ -602,7 +602,7 @@ SIME_cv <- function(
 #' @return A list containing the baseline MSD, threshold, eta path,
 #'   selected eta, and selected SIME fit.
 #' @export
-SIME_select_eta_threshold <- function(
+SIME_select <- function(
     f1_fun,
     f2_fun,
     data2,
