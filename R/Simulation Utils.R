@@ -218,3 +218,61 @@ combine_surface_functions <- function(f1, f2) {
     out1 + out2
   }
 }
+
+
+#' Compute manifold approximation error (MSD) with respect to a true surface
+#'
+#' This function computes the mean squared distance (MSD) between a true
+#' manifold \eqn{f_{\text{true}}} and an estimated manifold \eqn{\hat f}.
+#' The metric is defined as
+#' \deqn{
+#' \mathrm{MSD}(\hat f) = \mathbb{E} \left\| X - \hat f(\pi_{\hat f}(X)) \right\|^2,
+#' }
+#' @param f_hat A function representing the estimated manifold \eqn{\hat f},
+#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
+#' @param f_true A function representing the true manifold \eqn{f_{\text{true}}},
+#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
+#' @param uv_grid A matrix or data frame of parameter values (u, v) used to
+#'   generate samples from the true manifold.
+#' @param seed Integer seed for reproducibility when generating data.
+#' @param init_method Character string specifying the initialization method
+#'   for projection (passed to \code{pme_initial_guess}). Default is \code{"pca"}.
+#'
+#' @return A numeric scalar representing the mean squared distance (MSD)
+#'
+#' @export
+calc_manifold_msd <- function(f_hat,
+                              f_true,
+                              uv_grid,
+                              seed = 123,
+                              init_method = "pca") {
+
+  # 1. generate true surface (no noise)
+  true_data <- generate_surface_data(
+    f_true,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  # 2. project true points onto estimated manifold
+  proj <- calc_params(
+    f = f_hat,
+    X = true_data$XYZ,
+    init_params = pme_initial_guess(true_data$XYZ, 2, init_method),
+    f_input = "vector"
+  )
+
+  # 3. reconstruct points from projection
+  fit <- generate_surface_data(
+    f_hat,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = proj
+  )
+
+  # 4. compute MSD
+  msd <- mean(rowSums((fit$XYZ - true_data$XYZ)^2))
+
+  return(msd)
+}
