@@ -276,3 +276,48 @@ calc_manifold_msd <- function(f_hat,
 
   return(msd)
 }
+
+
+
+#' Compute Mean Squared Distance Between Two Manifolds Under Parameter Correspondence
+#'
+#' This function computes the mean squared distance (MSD) between two manifold
+#' functions evaluated on a shared parameter grid \code{uv_grid}. It assumes that
+#' both manifolds are defined on the same parameter domain and that pointwise
+#' correspondence is given by identical \code{(u, v)} locations.
+#'
+#' @param f_ref A function representing the reference manifold. It should accept
+#'   input in \code{uv_grid} format and return an \eqn{n \times 3} matrix of 3D coordinates.
+#' @param f_cmp A function representing the comparison manifold (e.g., SIME or PME estimate).
+#'   Same interface as \code{f_ref}.
+#' @param uv_grid A data frame or matrix of parameter locations with columns \code{u} and \code{v}.
+#' @param seed Integer random seed for reproducibility (passed to data generation).
+#'
+#' @return A numeric value representing the mean squared distance between the two manifolds.
+#'
+#' @export
+calc_correspondence_msd <- function(f_ref,
+                                    f_cmp,
+                                    uv_grid,
+                                    seed = 123) {
+  ref_data <- generate_surface_data(
+    f = f_ref,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  cmp_data <- generate_surface_data(
+    f = f_cmp,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  if (!all(dim(ref_data$XYZ) == dim(cmp_data$XYZ))) {
+    stop("Reference and comparison manifolds do not have matching output dimensions.")
+  }
+
+  msd <- mean(rowSums((ref_data$XYZ - cmp_data$XYZ)^2))
+  return(msd)
+}
