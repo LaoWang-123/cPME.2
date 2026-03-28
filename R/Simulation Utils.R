@@ -177,13 +177,6 @@ generate_surface_data <- function(f,
 #'
 #' contam_fn <- make_bump_field(A, u0, v0, sigma)
 #'
-#' # Evaluate at a single point
-#' contam_fn(0.5, 0.5)
-#'
-#' # Evaluate at multiple points
-#' u <- c(0.2, 0.5, 0.8)
-#' v <- c(0.3, 0.5, 0.7)
-#' contam_fn(u, v)
 make_bump_field <- function(A, u0, v0, sigma) {
   K <- length(A)
   stopifnot(length(u0) == K,
@@ -198,4 +191,30 @@ make_bump_field <- function(A, u0, v0, sigma) {
   }
 }
 
+#' Combine two surface/field functions by pointwise addition
+#'
+#' Given two functions f1 and f2 mapping (u, v) -> R^3,
+#' construct a new function
+#'
+#'   f(u,v) = f1(u,v) + f2(u,v)
+#'
+#' @param f1 function(u, v) returning n x 3 matrix
+#' @param f2 function(u, v) returning n x 3 matrix
+#'
+#' @returns A function (u, v) -> n x 3 matrix
+#' @export
+combine_surface_functions <- function(f1, f2) {
 
+  function(u, v) {
+    out1 <- f1(u, v)
+    out2 <- f2(u, v)
+
+    stopifnot(
+      is.matrix(out1), is.matrix(out2),
+      ncol(out1) == 3, ncol(out2) == 3,
+      nrow(out1) == nrow(out2)
+    )
+
+    out1 + out2
+  }
+}

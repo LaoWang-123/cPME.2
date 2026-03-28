@@ -575,3 +575,195 @@ SIME_cv <- function(
     SIME_final = final_fit
   )
 }
+
+
+
+#' Select eta by threshold rule with early stopping
+#'
+#' Fit SIME along an increasing eta grid. Use the baseline MSD from f2_fun
+#' as a reference scale, define threshold = c * baseline_msd, and select
+#' the largest eta whose fitted SIME MSD does not exceed the threshold.
+#'
+#' Early stopping rule:
+#' stop as soon as the fitted MSD exceeds the threshold.
+#'
+#' @param f1_fun Reference manifold function (e.g. MRI PME embedding map).
+#' @param f2_fun Baseline target manifold function (e.g. PET PME embedding map).
+#' @param data2 Raw target data matrix (n x D).
+#' @param c Positive multiplier for threshold. threshold = c * baseline_msd.
+#' @param eta_vec Candidate eta values. Will be sorted increasingly.
+#' @param lambda Candidate lambda values for SIME().
+#' @param d Intrinsic dimension.
+#' @param epsilon,max_iter,SSD_ratio_threshold Same as in SIME().
+#' @param init_args_f2 Arguments passed to initialize_pme().
+#' @param seed Optional random seed.
+#' @param verbose Logical.
+#'
+#' @return A list containing the baseline MSD, threshold, eta path,
+#'   selected eta, and selected SIME fit.
+#' @export
+SIME_select_eta_threshold <- function(
+    f1_fun,
+    f2_fun,
+    data2,
+    c = 1.3,
+    eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
+    lambda = exp(-15:5),
+    d = 2,
+    epsilon = 1,
+    max_iter = 100,
+    SSD_ratio_threshold = 5,
+    init_args_f2 = list(
+      min_clusters = 10,
+      alpha = 0.01,
+      max_clusters = 100,
+      algorithm = "isomap",
+      rescale = FALSE,
+      component_type = "centers",
+      subsample_size = 5,
+      d = 2
+    ),
+    seed = NULL,
+    verbose = TRUE
+) {
+
+
+  data2 <- as.matrix(data2)
+  n <- nrow(data2)
+  D <- ncol(data2)
+
+
+  eta_vec <- sort(unique(as.numeric(eta_vec)))   # increasing eta
+  lambda  <- as.numeric(lambda)
+
+  if (!is.null(seed)) set.seed(seed)
+
+  # ----------------------------
+  # initialize once on full data
+  # ----------------------------
+  if (verbose) {
+    message("==================================================")
+    message("Initializing PME on full data")
+    message("==================================================")
+  }
+
+  init2 <- do.call(
+    initialize_pme,
+    c(list(x = data2), init_args_f2)
+  )
+
+  # align center parameterization to f2_fun
+  init2$parameterization <- calc_params(
+    f = f2_fun,
+    X = init2$centers,
+    init_params = init2$parameterization,
+    f_input = "vector"
+  )
+
+  # ----------------------------
+  # baseline MSD from f2_fun
+  # ----------------------------
+  baseline_msd <- calc_msd(
+    data2 = data2,
+    km = init2$km,
+    f = f2_fun,
+    params = init2$parameterization,
+    D = D,
+    d = d
+  )
+
+  threshold <- c * baseline_msd
+
+  if (verbose) {
+    message(sprintf("Baseline MSD = %g", baseline_msd))
+    message(sprintf("Threshold = %g * %g = %g", c, baseline_msd, threshold))
+  }
+
+  # ----------------------------
+  # storage
+  # ----------------------------
+  eta_fit_msd <- rep(NA_real_, length(eta_vec))
+  eta_lambda_star <- rep(NA_real_, length(eta_vec))
+  eta_fit_list <- vector("list", length(eta_vec))
+  is_admissible <- rep(FALSE, length(eta_vec))
+
+  selected_idx <- NA_integer_
+
+  # ----------------------------
+  # loop over eta, early stop when MSD > threshold
+  # ----------------------------
+  for (e in seq_along(eta_vec)) {
+    eta_now <- eta_vec[e]
+
+    fit_e <- SIME(
+      f1_fun = f1_fun,
+      init2 = init2,
+      data2 = data2,
+      eta = eta_now,
+      lambda = lambda,
+      d = d,
+      epsilon = epsilon,
+      max_iter = max_iter,
+      SSD_ratio_threshold = SSD_ratio_threshold,
+      verbose = FALSE
+    )
+
+    idx_star <- match(fit_e$tuning, fit_e$tuning_vec)
+    if (is.na(idx_star)) idx_star <- which.min(fit_e$MSD)
+
+    fit_msd_now <- fit_e$MSD[idx_star]
+
+    eta_fit_msd[e] <- fit_msd_now
+    eta_lambda_star[e] <- fit_e$tuning
+    eta_fit_list[[e]] <- fit_e
+
+    if (fit_msd_now <= threshold) {
+      is_admissible[e] <- TRUE
+      selected_idx <- e
+    } else {
+      is_admissible[e] <- FALSE
+
+      if (verbose) {
+        message(sprintf(
+          "eta = %g, lambda* = %g, MSD = %g > threshold = %g. Early stopping.",
+          eta_now, fit_e$tuning, fit_msd_now, threshold
+        ))
+      }
+      break
+    }
+
+    if (verbose) {
+      message(sprintf(
+        "eta = %g, lambda* = %g, MSD = %g <= threshold = %g",
+        eta_now, fit_e$tuning, fit_msd_now, threshold
+      ))
+    }
+  }
+
+  # ----------------------------
+  # prepare output
+  # ----------------------------
+
+  selected_eta <- eta_vec[selected_idx]
+  selected_fit <- eta_fit_list[[selected_idx]]
+
+  if (verbose) {
+    message("==================================================")
+    message(sprintf("Selected eta = %g", selected_eta))
+    message(sprintf("Selected lambda = %g", eta_lambda_star[selected_idx]))
+    message(sprintf("Selected MSD = %g", eta_fit_msd[selected_idx]))
+    message("==================================================")
+  }
+
+  list(
+    rule = "largest eta with SIME MSD <= c * baseline MSD; early stop at first exceedance",
+    baseline_msd = baseline_msd,
+    threshold = threshold,
+    c = c,
+    eta_fit_msd = eta_fit_msd,
+    eta_lambda_star = eta_lambda_star,
+    admissible_eta = eta_vec[which(is_admissible)],
+    selected_eta = selected_eta,
+    selected_fit = selected_fit
+  )
+}
