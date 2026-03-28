@@ -142,3 +142,60 @@ generate_surface_data <- function(f,
 }
 
 
+##### Contamination in simulations
+
+
+#' Contamination field defined by a sum of Gaussian bumps (z-axis deformation)
+#'
+#' This function constructs a smooth contamination vector field
+#' \eqn{c : [0,1]^2 \to \mathbb{R}^3} acting along the z-axis,
+#' defined as a linear combination of Gaussian radial basis functions:
+#' \deqn{
+#' h(u,v) = \sum_{k=1}^K A_k \exp\left(
+#' -\frac{(u - u_k)^2 + (v - v_k)^2}{2\sigma_k^2}
+#' \right).
+#' }
+#'
+#' This construction is commonly used to model structured contamination.
+#'
+#' @param A Numeric vector of amplitudes \eqn{A_k}. Can contain both positive
+#'   and negative values to represent upward or downward deformation.
+#' @param u0 Numeric vector of bump centers in the \eqn{u}-direction.
+#' @param v0 Numeric vector of bump centers in the \eqn{v}-direction.
+#' @param sigma Numeric vector of positive bandwidth parameters \eqn{\sigma_k},
+#'   controlling the spatial spread of each bump.
+#'
+#' @returns A function \code{f(u, v)} that evaluates the contamination field.
+#' @export
+#'
+#' @examples
+#' # Two bumps: one positive, one negative
+#' A     <- c(0.15, -0.12)
+#' u0    <- c(0.3, 0.7)
+#' v0    <- c(0.4, 0.6)
+#' sigma <- c(0.15, 0.2)
+#'
+#' contam_fn <- make_bump_field(A, u0, v0, sigma)
+#'
+#' # Evaluate at a single point
+#' contam_fn(0.5, 0.5)
+#'
+#' # Evaluate at multiple points
+#' u <- c(0.2, 0.5, 0.8)
+#' v <- c(0.3, 0.5, 0.7)
+#' contam_fn(u, v)
+make_bump_field <- function(A, u0, v0, sigma) {
+  K <- length(A)
+  stopifnot(length(u0) == K,
+            length(v0) == K,
+            length(sigma) == K)
+
+  function(u, v) {
+    z <- sum(
+      A * exp(-((u - u0)^2 + (v - v0)^2) / (2 * sigma^2))
+    )
+    cbind(0, 0, z)
+  }
+}
+
+
