@@ -42,11 +42,4 @@ sigma <- c(0.15, 0.2)
 
 contam_fn <- make_bump_field(A, u0, v0, sigma)
 
-# Evaluate at a single point
-contam_fn(0.5, 0.5)
-
-# Evaluate at multiple points
-u <- c(0.2, 0.5, 0.8)
-v <- c(0.3, 0.5, 0.7)
-contam_fn(u, v)
 }
