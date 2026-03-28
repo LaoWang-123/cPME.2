@@ -663,14 +663,7 @@ SIME_select <- function(
   # ----------------------------
   # baseline MSD from f2_fun
   # ----------------------------
-  baseline_msd <- calc_msd(
-    data2 = data2,
-    km = init2$km,
-    f = f2_fun,
-    params = init2$parameterization,
-    D = D,
-    d = d
-  )
+  baseline_msd <- calc_msd(x = data2, km = init2$km,f = f2_fun,t = init2$parameterization,D = D,d = d)
 
   threshold <- c * baseline_msd
 
