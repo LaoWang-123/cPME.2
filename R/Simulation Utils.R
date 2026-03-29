@@ -33,17 +33,34 @@ translate_surface_function <- function(f, translate = c(0,0,0)) {
 #'
 #' @returns a data.frame contains grid points
 #' @export
-make_uv_grid <- function(n_u = 60, n_v = 60,
-                         grid_type = c("disk", "square"),
-                         center = c(0.5, 0.5),
-                         radius = 0.5,xmin=0,xmax=1,ymin=0,ymax=1) {
+make_uv_grid <- function(
+    n_u = 60, n_v = 60,
+    grid_type = c("disk", "square"),
+    center = NULL,
+    radius = NULL,
+    xmin = 0, xmax = 1,
+    ymin = 0, ymax = 1
+) {
   grid_type <- match.arg(grid_type)
 
+  ## ---- create grid ----
   uv <- expand.grid(
     u = seq(xmin, xmax, length.out = n_u),
     v = seq(ymin, ymax, length.out = n_v)
   )
 
+  ## ---- auto center ----
+  if (is.null(center)) {
+    center <- c((xmin + xmax) / 2, (ymin + ymax) / 2)
+  }
+
+  ## ---- auto radius ----
+  if (is.null(radius)) {
+    # inscribed circle
+    radius <- min(xmax - xmin, ymax - ymin) / 2
+  }
+
+  ## ---- disk filter ----
   if (grid_type == "disk") {
     cu <- center[1]; cv <- center[2]
     uv <- subset(uv, (u - cu)^2 + (v - cv)^2 <= radius^2)
