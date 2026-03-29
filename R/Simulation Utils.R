@@ -237,6 +237,7 @@ combine_surface_functions <- function(f1, f2) {
 #' @param seed Integer seed for reproducibility when generating data.
 #' @param init_method Character string specifying the initialization method
 #'   for projection (passed to \code{pme_initial_guess}). Default is \code{"pca"}.
+#' @param return_xyz default FALSE
 #'
 #' @return A numeric scalar representing the mean squared distance (MSD)
 #'
@@ -245,7 +246,8 @@ calc_manifold_msd <- function(f_hat,
                               f_true,
                               uv_grid,
                               seed = 123,
-                              init_method = "pca") {
+                              init_method = "pca",
+                              return_xyz = FALSE) {
 
   # 1. generate true surface (no noise)
   true_data <- generate_surface_data(
@@ -274,9 +276,16 @@ calc_manifold_msd <- function(f_hat,
   # 4. compute MSD
   msd <- mean(rowSums((fit$XYZ - true_data$XYZ)^2))
 
+  if (return_xyz) {
+    return(list(
+      msd = msd,
+      fit_xyz = fit$XYZ,
+      true_xyz = true_data$XYZ
+    ))
+  }
+
   return(msd)
 }
-
 
 
 #' Compute Mean Squared Distance Between Two Manifolds Under Parameter Correspondence

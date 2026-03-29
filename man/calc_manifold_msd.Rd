@@ -4,7 +4,14 @@
 \alias{calc_manifold_msd}
 \title{Compute manifold approximation error (MSD) with respect to a true surface}
 \usage{
-calc_manifold_msd(f_hat, f_true, uv_grid, seed = 123, init_method = "pca")
+calc_manifold_msd(
+  f_hat,
+  f_true,
+  uv_grid,
+  seed = 123,
+  init_method = "pca",
+  return_xyz = FALSE
+)
 }
 \arguments{
 \item{f_hat}{A function representing the estimated manifold \eqn{\hat f},
@@ -20,6 +27,8 @@ generate samples from the true manifold.}
 
 \item{init_method}{Character string specifying the initialization method
 for projection (passed to \code{pme_initial_guess}). Default is \code{"pca"}.}
+
+\item{return_xyz}{default FALSE}
 }
 \value{
 A numeric scalar representing the mean squared distance (MSD)
