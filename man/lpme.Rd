@@ -20,7 +20,8 @@ lpme(
   verbose = TRUE,
   print_plots = TRUE,
   increase_threshold = 1.05,
-  init = "full"
+  init = "full",
+  pme_list = NULL
 )
 }
 \arguments{
@@ -55,6 +56,8 @@ lpme(
 \item{increase_threshold}{A value.}
 
 \item{init}{Indicates which time points are used to initialize the function.}
+
+\item{pme_list}{We can provide pme results with consistent parameterization by choice.}
 }
 \value{
 An object of type "lpme".

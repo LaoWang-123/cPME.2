@@ -86,6 +86,7 @@ is_lpme <- function(x) {
 #' @param print_plots A logical value indicating whether plots should be printed.
 #' @param increase_threshold A value.
 #' @param init Indicates which time points are used to initialize the function.
+#' @param pme_list We can provide pme results with consistent parameterization by choice.
 #'
 #' @return An object of type "lpme".
 #' @export
@@ -105,7 +106,8 @@ lpme <- function(
   verbose = TRUE,
   print_plots = TRUE,
   increase_threshold = 1.05,
-  init = "full"
+  init = "full",
+  pme_list = NULL
 ) {
   # Declare initial variable values ---------------------------------------
   time_points <- unique(data[, 1])
@@ -133,26 +135,32 @@ lpme <- function(
     min_clusters <- 10 * d
   }
 
-  initialization <- initialize_lpme(
-    data,
-    init,
-    time_points,
-    d,
-    alpha,
-    max_clusters,
-    min_clusters,
-    initialization = initialization_algorithm,
-    initialization_type = init_type
-  )
+  if(is.null(pme_list)){
+    initialization <- initialize_lpme(
+      data,
+      init,
+      time_points,
+      d,
+      alpha,
+      max_clusters,
+      min_clusters,
+      initialization = initialization_algorithm,
+      initialization_type = init_type
+    )
 
-  init_pme_list <- fit_init_pmes(
-    data,
-    time_points,
-    init,
-    initialization,
-    d,
-    lambda
-  )
+    init_pme_list <- fit_init_pmes(
+      data,
+      time_points,
+      init,
+      initialization,
+      d,
+      lambda
+    )
+  }else{
+    init_pme_list <- build_init_pme_list_from_results(pme_results = pme_list,time_points = time_points,d = d)
+  }
+
+
   splines <- merge_spline_coefs(init_pme_list, d, time_points)
 
   spline_coefficients <- splines$coef_full
@@ -626,6 +634,66 @@ fit_init_pmes <- function(df, time_points, init_option, init, d, lambda) {
   )
   init_pme_list
 }
+
+######### Add by Liangkang on 4/12/2026
+build_init_pme_list_from_results <- function(pme_results, time_points, d) {
+  kernel_coefs <- list()
+  polynomial_coefs <- list()
+  funcs <- list()
+  clusters <- list()
+  centers <- list()
+  embeddings <- list()
+  params <- list()
+  times <- list()
+  num_clusters <- rep(0, length(time_points))
+  errors <- vector()
+
+  for (idx in seq_along(time_points)) {
+    opt_run <- which.min(pme_results[[idx]]$MSD)
+    funcs[[idx]] <- pme_results[[idx]]$embedding_map
+    centers[[idx]] <- pme_results[[idx]]$knots$centers
+    num_clusters[idx] <- dim(pme_results[[idx]]$knots$centers)[1]
+    if (idx == 1) {
+      clusters[[idx]] <- pme_results[[idx]]$knots$cluster
+    } else {
+      clusters[[idx]] <- pme_results[[idx]]$knots$cluster + sum(num_clusters)
+    }
+    kernel_coefs[[idx]] <- pme_results[[idx]]$coefs[[opt_run]][
+      1:num_clusters[idx],
+    ]
+    polynomial_coefs[[idx]] <- pme_results[[idx]]$coefs[[opt_run]][
+      (num_clusters[idx] + 1):(num_clusters[idx] + d + 2),
+    ] %>%
+      t() %>%
+      matrix(nrow = 1)
+    embeddings[[idx]] <- apply(
+      pme_results[[idx]]$parameterization[[opt_run]],
+      1,
+      funcs[[idx]]
+    ) %>%
+      t()
+    params[[idx]] <- pme_results[[idx]]$parameterization[[opt_run]]
+    times[[idx]] <- time_points[idx]
+    errors[idx] <- pme_results[[idx]]$MSD[opt_run]
+  }
+
+  init_pme_list <- list(
+    pme_results = pme_results,
+    kernel_coefs = kernel_coefs,
+    polynomial_coefs = polynomial_coefs,
+    funcs = funcs,
+    clusters = clusters,
+    centers = centers,
+    embeddings = embeddings,
+    params = params,
+    times = times,
+    num_clusters = num_clusters,
+    errors = errors
+  )
+  init_pme_list
+}
+############################
+
 
 merge_spline_coefs <- function(pme_list, d, time_points) {
   lambda <- vector()
