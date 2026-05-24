@@ -300,61 +300,6 @@ assemble_grad_f2k_from_state <- function(state_list, gamma_k, f2_grad_fn, epsilo
 
 ### We optimize some functions and workflow to accelerate the computation speed
 
-#' Build basis with grid points
-#'
-#' @param basis_set A list of basis functions.
-#' @param Ugrid Data frame of (u,v) sample locations.
-#' @param mode c("full","div_free")
-#'
-#' @returns a list of bi, calculated on grid points.
-#' @export
-#'
-build_basis_grid <- function(basis_set, Ugrid, mode = c("full","div_free")) {
-  mode <- match.arg(mode)
-  out <- list()
-  n  <- nrow(Ugrid)
-  keys <- sort(names(basis_set))
-
-  for (key in keys) {
-    bs <- basis_set[[key]]
-
-    psi_vals <- vapply(1:n, function(i) bs$psi(Ugrid[i,1], Ugrid[i,2]), numeric(1))
-
-    # rot always needed if div_free
-    rot_vals <- t(vapply(
-      1:n,
-      function(i) bs$rot_grad_psi(Ugrid[i,1], Ugrid[i,2]),
-      numeric(2)
-    ))
-    rot_x <- rot_vals[,1]
-    rot_y <- rot_vals[,2]
-
-    if (mode == "full") {
-      grad_vals <- t(vapply(
-        1:n,
-        function(i) bs$grad_psi(Ugrid[i,1], Ugrid[i,2]),
-        numeric(2)
-      ))
-      grad_psi_x <- grad_vals[,1]
-      grad_psi_y <- grad_vals[,2]
-    } else {
-      grad_psi_x <- NULL
-      grad_psi_y <- NULL
-    }
-
-    out[[key]] <- list(
-      psi        = psi_vals,
-      grad_psi_x = grad_psi_x,
-      grad_psi_y = grad_psi_y,
-      rot_x      = rot_x,
-      rot_y      = rot_y,
-      lambda     = bs$lambda_pq,
-      norm       = bs$norm_pq
-    )
-  }
-  out
-}
-
 
 
 

@@ -20,7 +20,7 @@
 #' Bd <- build_basis_set(5, 5, dirichlet_basis)
 #'
 #' @export
-build_basis_set <- function(Pmax, Qmax, basis=c(fourier_basis,neumann_basis,dirichlet_basis))
+build_basis_set <- function(Pmax, Qmax,include_constant = FALSE, basis=c(fourier_basis,neumann_basis,dirichlet_basis))
 {
   basis_set <- list()
 
@@ -33,7 +33,9 @@ build_basis_set <- function(Pmax, Qmax, basis=c(fourier_basis,neumann_basis,diri
 
       # Skip constant mode for cosine (Fourier/Neumann)
       # Dirichlet will never hit (0,0) because p_min=q_min=1
-      if (p == 0 && q == 0) next
+      # default: skip (0,0), same as old behavior
+      # for UQ kernel: set include_constant = TRUE
+      if (!include_constant && p == 0 && q == 0) next
 
       key <- paste(p, q, sep = "_")
 
@@ -44,12 +46,111 @@ build_basis_set <- function(Pmax, Qmax, basis=c(fourier_basis,neumann_basis,diri
         Dgrad_psi = basis$jac_g(p, q),
         Drot_grad_psi  = basis$jac_r(p, q),
         lambda_pq = basis$lambda(p, q),
-        norm_pq   = basis$norm(p, q)
+        norm_pq   = basis$norm(p, q) # L2 norm of the gradient field ||∇ψ_pq||_L2, used for normalized tangent vector construction.
+
       )
     }
   }
 
   return(basis_set)
+}
+
+
+
+#' Evaluate Basis Functions on a Grid
+#'
+#' Evaluates a pre-constructed basis system on a set of parameter-domain
+#' locations. The function supports three modes. The `"full"` mode evaluates
+#' scalar, gradient, and rotated-gradient basis functions. The `"div_free"`
+#' mode evaluates scalar and rotated-gradient basis functions for
+#' divergence-free reparameterization updates. The `"scalar"` mode evaluates
+#' only scalar basis functions and is intended for uncertainty quantification,
+#' spectral kernel construction, and pointwise posterior variance estimation.
+#'
+#' @param basis_set A named list of basis functions returned by
+#'   \code{build_basis_set()}.
+#' @param Ugrid A two-column matrix or data frame of parameter locations.
+#'   Each row is one point \eqn{(u,v)} in the parameter domain.
+#' @param mode Character string specifying which quantities to evaluate.
+#'   Options are \code{"full"}, \code{"div_free"}, and \code{"scalar"}.
+#'   The default is \code{"full"}.
+#'
+#' @return A named list indexed by basis labels. Each entry contains the
+#'   evaluated scalar basis values \code{psi}, the Laplacian eigenvalue
+#'   \code{lambda}, and the normalization constant \code{norm}. In
+#'   \code{"full"} mode, gradient and rotated-gradient components are also
+#'   returned. In \code{"div_free"} mode, only rotated-gradient components
+#'   are returned in addition to scalar quantities. In \code{"scalar"} mode,
+#'   no vector-field quantities are evaluated.
+#'
+#' @export
+build_basis_grid <- function(
+    basis_set,
+    Ugrid,
+    mode = c("full", "div_free", "scalar")
+) {
+  mode <- match.arg(mode)
+  Ugrid <- as.matrix(Ugrid)
+
+  out <- list()
+  n <- nrow(Ugrid)
+  keys <- sort(names(basis_set))
+
+  for (key in keys) {
+    bs <- basis_set[[key]]
+
+    # Scalar basis values are needed in all modes.
+    psi_vals <- vapply(
+      seq_len(n),
+      function(i) bs$psi(Ugrid[i, 1], Ugrid[i, 2]),
+      numeric(1)
+    )
+
+    # UQ only needs scalar basis values and eigenvalues.
+    if (mode == "scalar") {
+      out[[key]] <- list(
+        psi = psi_vals,
+        lambda = bs$lambda_pq,
+        norm = bs$norm_pq
+      )
+      next
+    }
+
+    # Rotated-gradient basis is needed for divergence-free updates.
+    rot_vals <- t(vapply(
+      seq_len(n),
+      function(i) bs$rot_grad_psi(Ugrid[i, 1], Ugrid[i, 2]),
+      numeric(2)
+    ))
+
+    if (mode == "full") {
+      grad_vals <- t(vapply(
+        seq_len(n),
+        function(i) bs$grad_psi(Ugrid[i, 1], Ugrid[i, 2]),
+        numeric(2)
+      ))
+
+      grad_psi_x <- grad_vals[, 1]
+      grad_psi_y <- grad_vals[, 2]
+    } else {
+      grad_psi_x <- NULL
+      grad_psi_y <- NULL
+    }
+
+    out[[key]] <- list(
+      psi = psi_vals,
+      grad_psi_x = grad_psi_x,
+      grad_psi_y = grad_psi_y,
+      rot_x = rot_vals[, 1],
+      rot_y = rot_vals[, 2],
+      lambda = bs$lambda_pq,
+      norm = bs$norm_pq  # Gradient-field normalization constant.
+      # For normalized scalar bases, this is not ||ψ_pq||, but ||∇ψ_pq||_L2.
+
+    )
+  }
+
+  out
 }
 
 

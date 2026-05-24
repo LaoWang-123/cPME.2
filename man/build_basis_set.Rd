@@ -7,6 +7,7 @@
 build_basis_set(
   Pmax,
   Qmax,
+  include_constant = FALSE,
   basis = c(fourier_basis, neumann_basis, dirichlet_basis)
 )
 }
