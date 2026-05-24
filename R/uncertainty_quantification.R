@@ -60,12 +60,18 @@ prior_kernel_matrix <- function(
 #' @param target_u A two-column matrix or data frame of target parameter
 #'   locations where posterior variance is evaluated.
 #' @param obs_u A two-column matrix or data frame of fixed projection
-#'   locations \eqn{u_i = \pi_{\hat f_{\mathrm{SIME}}}(x_i)}.
+#'   locations \eqn{u_i = \pi_{\hat f_{\mathrm{SIME}}}(x_i)}. Required if
+#'   \code{basis_obs} is not supplied.
 #' @param basis_set A basis set returned by \code{build_basis_set()}.
 #'   For UQ, this should usually be constructed with
 #'   \code{include_constant = TRUE}.
 #' @param lambda Selected smoothness tuning parameter.
 #' @param eta Selected structural regularization parameter.
+#' @param basis_obs Optional precomputed scalar basis grid for \code{obs_u},
+#'   usually from \code{build_basis_grid(basis_set, obs_u, mode = "scalar")}.
+#' @param KU Optional precomputed prior kernel matrix
+#'   \eqn{K_0(U_{\mathrm{obs}}, U_{\mathrm{obs}})}. If supplied, it must be
+#'   compatible with \code{basis_obs}.
 #' @param total_3d Logical. If \code{FALSE}, returns the scalar coordinate-wise
 #'   variance. If \code{TRUE}, returns the summed three-dimensional variance,
 #'   equal to three times the scalar variance under independent identical
@@ -77,27 +83,52 @@ prior_kernel_matrix <- function(
 #' @export
 pointwise_variance_estimator <- function(
     target_u,
-    obs_u,
+    obs_u = NULL,
     basis_set,
     lambda,
     eta,
+    basis_obs = NULL,
+    KU = NULL,
     total_3d = FALSE,
     jitter = 1e-8
 ) {
   target_u <- as.matrix(target_u)
-  obs_u <- as.matrix(obs_u)
 
-  if (ncol(target_u) != 2 || ncol(obs_u) != 2) {
-    stop("target_u and obs_u must both have two columns.")
+  if (ncol(target_u) != 2) {
+    stop("target_u must have two columns.")
   }
   if (lambda < 0 || eta <= 0) {
     stop("lambda must be nonnegative and eta must be positive.")
   }
 
-  basis_target <- build_basis_grid(basis_set, target_u, mode = "scalar")
-  basis_obs <- build_basis_grid(basis_set, obs_u, mode = "scalar")
+  if (is.null(basis_obs)) {
+    if (is.null(obs_u)) {
+      stop("obs_u is required when basis_obs is not supplied.")
+    }
 
-  KU <- prior_kernel_matrix(basis_obs, basis_obs, lambda, eta)
+    obs_u <- as.matrix(obs_u)
+
+    if (ncol(obs_u) != 2) {
+      stop("obs_u must have two columns.")
+    }
+
+    basis_obs <- build_basis_grid(basis_set, obs_u, mode = "scalar")
+  }
+
+  basis_target <- build_basis_grid(basis_set, target_u, mode = "scalar")
+
+  if (is.null(KU)) {
+    KU <- prior_kernel_matrix(basis_obs, basis_obs, lambda, eta)
+  } else {
+    KU <- as.matrix(KU)
+  }
+
+  n_obs <- length(basis_obs[[1]]$psi)
+
+  if (!all(dim(KU) == c(n_obs, n_obs))) {
+    stop("KU must be a square matrix with dimension equal to the number of observed parameter locations.")
+  }
+
   KTU <- prior_kernel_matrix(basis_target, basis_obs, lambda, eta)
   KTT <- prior_kernel_matrix(basis_target, basis_target, lambda, eta)
 

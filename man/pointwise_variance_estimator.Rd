@@ -6,10 +6,12 @@
 \usage{
 pointwise_variance_estimator(
   target_u,
-  obs_u,
+  obs_u = NULL,
   basis_set,
   lambda,
   eta,
+  basis_obs = NULL,
+  KU = NULL,
   total_3d = FALSE,
   jitter = 1e-08
 )
@@ -19,7 +21,8 @@ pointwise_variance_estimator(
 locations where posterior variance is evaluated.}
 
 \item{obs_u}{A two-column matrix or data frame of fixed projection
-locations \eqn{u_i = \pi_{\hat f_{\mathrm{SIME}}}(x_i)}.}
+locations \eqn{u_i = \pi_{\hat f_{\mathrm{SIME}}}(x_i)}. Required if
+\code{basis_obs} is not supplied.}
 
 \item{basis_set}{A basis set returned by \code{build_basis_set()}.
 For UQ, this should usually be constructed with
@@ -28,6 +31,13 @@ For UQ, this should usually be constructed with
 \item{lambda}{Selected smoothness tuning parameter.}
 
 \item{eta}{Selected structural regularization parameter.}
+
+\item{basis_obs}{Optional precomputed scalar basis grid for \code{obs_u},
+usually from \code{build_basis_grid(basis_set, obs_u, mode = "scalar")}.}
+
+\item{KU}{Optional precomputed prior kernel matrix
+\eqn{K_0(U_{\mathrm{obs}}, U_{\mathrm{obs}})}. If supplied, it must be
+compatible with \code{basis_obs}.}
 
 \item{total_3d}{Logical. If \code{FALSE}, returns the scalar coordinate-wise
 variance. If \code{TRUE}, returns the summed three-dimensional variance,
