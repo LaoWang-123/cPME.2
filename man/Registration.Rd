@@ -13,10 +13,16 @@ Registration Class for cPME Algorithm
 Registration Class for cPME Algorithm
 }
 \details{
-This class implements the surface registration algorithm used in cPME.
+This is the current registration implementation used by cPME. It combines
+the fast grid-precomputed registration path with safe step acceptance:
+each proposed update is accepted only if it does not increase the selected
+registration energy and remains inside the allowed parameter-domain
+tolerance. Backtracking is used to shrink the step size when needed.
 It supports:
 - building basis functions
 - computing tangent updates
+- separate optimization and energy grids
+- safe backtracking and accepted-state history
 - iterative optimization
 - saving state to RDS
 }
@@ -27,41 +33,83 @@ It supports:
 
 \item{\code{f2}}{Function f2(u, v). The source surface to be warped.}
 
+\item{\code{f1_grid}}{The output of f1 function with uv-grid.}
+
+\item{\code{f2_grid}}{The output of f2 function with uv-grid.}
+
 \item{\code{f2_grad_fn}}{Gradient of f2, a function returning (df/du, df/dv).}
+
+\item{\code{grad_f2_grid}}{The output of f2_grad_fn function with uv-grid.}
 
 \item{\code{basis_set}}{A list of basis functions used to build the tangent basis.}
 
+\item{\code{basis_grid}}{A list of basis functions' output with grid input.}
+
 \item{\code{Ugrid}}{A data frame of (u, v) evaluation points on [0,1]^2.}
+
+\item{\code{n}}{the length of grid.}
 
 \item{\code{bi_set}}{Precomputed basis functions b_i(u,v).}
 
 \item{\code{D_bi_set}}{Precomputed gradients Db_i(u,v).}
 
-\item{\code{gamma_k}}{Current reparameterization map γ_k(u,v).}
+\item{\code{gamma_k}}{Current reparameterization map Î³_k(u,v).}
 
-\item{\code{f2_k}}{Current warped surface f2 ∘ γ_k.}
+\item{\code{f2_k}}{Current warped surface f2 âˆ˜ Î³_k.}
 
-\item{\code{grad_f2k_fun}}{Current gradient ∇(f2 ∘ γ_k).}
+\item{\code{grad_f2k_fun}}{Current gradient âˆ‡(f2 âˆ˜ Î³_k).}
 
-\item{\code{dgamma_coefs}}{Coefficients α_i in δγ = Σ α_i b_i.}
+\item{\code{dgamma_coefs}}{Coefficients Î±_i in Î´Î³ = Î£ Î±_i b_i.}
 
-\item{\code{delta_gamma_fn}}{Function δγ_k(u,v).}
+\item{\code{delta_gamma_fn}}{Function Î´Î³_k(u,v).}
 
-\item{\code{Ddelta_gamma_fn}}{Jacobian of δγ_k(u,v).}
+\item{\code{Ddelta_gamma_fn}}{Jacobian of Î´Î³_k(u,v).}
 
-\item{\code{state_list}}{List storing all iteration states (γ_k, α_k, E_k).}
+\item{\code{state_list}}{List storing all iteration states (Î³_k, Î±_k, E_k).}
 
 \item{\code{E_history}}{Numeric vector storing energy values E_k.}
 
 \item{\code{iter}}{Current iteration index.}
 
-\item{\code{eps_step}}{Step size for γ update.}
+\item{\code{eps_step}}{Step size for Î³ update.}
 
 \item{\code{eps_energy}}{Convergence threshold on |E_k - E_{k-1}|.}
 
 \item{\code{max_iter}}{Maximum number of iterations.}
 
+\item{\code{basis_mode}}{"full" or "div_free"}
+
 \item{\code{folder}}{Optional folder path for autosaving state.}
+
+\item{\code{filename}}{default "reg_state.rds"}
+
+\item{\code{verbose}}{If TRUE, print per-iteration energy updates as the optimizer runs.}
+
+\item{\code{energy_Ugrid}}{Grid used to evaluate the registration objective.}
+
+\item{\code{f1_energy_grid}}{Template surface values on `energy_Ugrid`.}
+
+\item{\code{energy_grid_source}}{Text label describing the energy grid choice.}
+
+\item{\code{rejected_steps}}{Proposed steps rejected by energy or domain checks.}
+
+\item{\code{last_step_accepted}}{Logical flag for the most recent registration step.}
+
+\item{\code{stop_reason}}{Text description of the current stopping condition.}
+
+\item{\code{eps_shrink}}{Multiplicative backtracking shrink factor.}
+
+\item{\code{eps_min}}{Smallest step size tried during backtracking.}
+
+\item{\code{max_backtracking}}{Maximum number of step-size attempts per update.}
+
+\item{\code{domain_lower}}{Lower allowed coordinate for gamma grids.}
+
+\item{\code{domain_upper}}{Upper allowed coordinate for gamma grids.}
+
+\item{\code{max_displacement}}{Optional cap on max gamma displacement per step.}
+
+\item{\code{backtracking_history}}{Attempted eps values and energies for each step.}
 }
 \if{html}{\out{</div>}}
 }
@@ -83,7 +131,7 @@ It supports:
 \subsection{Method \code{new()}}{
 Initialization of the registration object.
 Sets user-provided surfaces, gradients, basis functions, and algorithm
-hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
+hyperparameters. Precomputes basis fields and initializes Î³_0 and f2_0.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Registration$new(
   f1,
@@ -94,7 +142,18 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
   eps_step = 0.05,
   eps_energy = 1e-05,
   max_iter = 100,
-  folder = NULL
+  basis_mode = c("full", "div_free"),
+  folder = NULL,
+  filename = "reg_state.rds",
+  verbose = TRUE,
+  energy_Ugrid = NULL,
+  energy_grid_source = NULL,
+  eps_shrink = 0.5,
+  eps_min = 5e-04,
+  max_backtracking = 12L,
+  domain_lower = -0.15,
+  domain_upper = 1.15,
+  max_displacement = 0.05
 )}\if{html}{\out{</div>}}
 }
 
@@ -117,7 +176,29 @@ hyperparameters. Precomputes basis fields and initializes γ_0 and f2_0.
 
 \item{\code{max_iter}}{Maximum number of iterations.}
 
+\item{\code{basis_mode}}{c("full", "div_free".}
+
 \item{\code{folder}}{Folder for autosave (optional).}
+
+\item{\code{filename}}{filename for autosave, default "reg_state.rds"}
+
+\item{\code{verbose}}{If TRUE, print per-iteration energy updates as the optimizer runs.}
+
+\item{\code{energy_Ugrid}}{Optional grid used only for objective evaluation.}
+
+\item{\code{energy_grid_source}}{Optional label describing `energy_Ugrid`.}
+
+\item{\code{eps_shrink}}{Multiplicative shrink factor for backtracking.}
+
+\item{\code{eps_min}}{Smallest eps tried during backtracking.}
+
+\item{\code{max_backtracking}}{Maximum number of eps attempts per step.}
+
+\item{\code{domain_lower}}{Lower allowed coordinate for gamma grids.}
+
+\item{\code{domain_upper}}{Upper allowed coordinate for gamma grids.}
+
+\item{\code{max_displacement}}{Optional cap on the maximum update displacement per step.}
 }
 \if{html}{\out{</div>}}
 }
@@ -130,7 +211,7 @@ The initialized Registration object (invisibly).
 \if{latex}{\out{\hypertarget{method-Registration-initialize_state}{}}}
 \subsection{Method \code{initialize_state()}}{
 Initialize iteration state for k = 0.
-Builds γ_0, f2_0, initial basis derivatives, α coefficients,
+Builds Î³_0, f2_0, initial basis derivatives, Î± coefficients,
 and stores the first state.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Registration$initialize_state()}\if{html}{\out{</div>}}
@@ -145,7 +226,7 @@ Nothing. Updates internal fields.
 \if{latex}{\out{\hypertarget{method-Registration-step}{}}}
 \subsection{Method \code{step()}}{
 Perform ONE gradient-descent update step.
-Updates γ_{k+1}, f2_{k+1}, computes energy, convergence check,
+Updates Î³_{k+1}, f2_{k+1}, computes energy, convergence check,
 recomputes basis derivatives and coefficients.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Registration$step()}\if{html}{\out{</div>}}
@@ -159,14 +240,15 @@ The current energy E_k (invisibly).
 \if{html}{\out{<a id="method-Registration-run"></a>}}
 \if{latex}{\out{\hypertarget{method-Registration-run}{}}}
 \subsection{Method \code{run()}}{
-Run the full optimization loop up to `max_iter`.
-Automatically stops if the energy change falls below `eps_energy`.
+Run safe registration up to `max_iter`.
+Stops at convergence, domain violation, non-finite energy, or rejected
+energy increase. Rejected states are logged but not accepted.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Registration$run()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{
-Nothing. Updates the entire optimization history.
+The current registration object, invisibly.
 }
 }
 \if{html}{\out{<hr>}}
@@ -174,7 +256,7 @@ Nothing. Updates the entire optimization history.
 \if{latex}{\out{\hypertarget{method-Registration-continue}{}}}
 \subsection{Method \code{continue()}}{
 Continue optimization from a previously saved state.
-Allows overriding step size, schedule, energy threshold, etc.
+Allows overriding step size and energy threshold.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Registration$continue(
   n_steps = NULL,
@@ -194,13 +276,11 @@ Allows overriding step size, schedule, energy threshold, etc.
 \item{\code{eps_step}}{Optional override of step size.}
 
 \item{\code{eps_energy}}{Optional new convergence tolerance.}
-
-\item{\code{step_schedule}}{Optional new step schedule.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-Nothing. Continues modifying the registration state.
+The current registration object, invisibly.
 }
 }
 \if{html}{\out{<hr>}}
