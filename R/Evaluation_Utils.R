@@ -1,3 +1,124 @@
+### Evaluation Utils
+# This file include functions used to calculate MSD across manifolds
+# theoretical variance estimator
+
+
+
+#' Compute manifold approximation error (MSD) with respect to a true surface
+#'
+#' This function computes the mean squared distance (MSD) between a true
+#' manifold \eqn{f_{\text{true}}} and an estimated manifold \eqn{\hat f}.
+#' The metric is defined as
+#' \deqn{
+#' \mathrm{MSD}(\hat f) = \mathbb{E} \left\| X - \hat f(\pi_{\hat f}(X)) \right\|^2,
+#' }
+#' @param f_hat A function representing the estimated manifold \eqn{\hat f},
+#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
+#' @param f_true A function representing the true manifold \eqn{f_{\text{true}}},
+#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
+#' @param uv_grid A matrix or data frame of parameter values (u, v) used to
+#'   generate samples from the true manifold.
+#' @param seed Integer seed for reproducibility when generating data.
+#' @param init_method Character string specifying the initialization method
+#'   for projection (passed to \code{pme_initial_guess}). Default is \code{"pca"}.
+#' @param return_xyz default FALSE
+#'
+#' @return A numeric scalar representing the mean squared distance (MSD)
+#'
+#' @export
+calc_manifold_msd <- function(f_hat,
+                              f_true,
+                              uv_grid,
+                              seed = 123,
+                              init_method = "pca",
+                              return_xyz = FALSE) {
+
+  # 1. generate true surface (no noise)
+  true_data <- generate_surface_data(
+    f_true,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  # 2. project true points onto estimated manifold
+  proj <- calc_params(
+    f = f_hat,
+    X = true_data$XYZ,
+    init_params = pme_initial_guess(true_data$XYZ, 2, init_method),
+    f_input = "vector"
+  )
+
+  # 3. reconstruct points from projection
+  fit <- generate_surface_data(
+    f_hat,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = proj
+  )
+
+  # 4. compute MSD
+  msd <- mean(rowSums((fit$XYZ - true_data$XYZ)^2))
+
+  if (return_xyz) {
+    return(list(
+      msd = msd,
+      fit_xyz = fit$XYZ,
+      true_xyz = true_data$XYZ
+    ))
+  }
+
+  return(msd)
+}
+
+
+#' Compute Mean Squared Distance Between Two Manifolds Under Parameter Correspondence
+#'
+#' This function computes the mean squared distance (MSD) between two manifold
+#' functions evaluated on a shared parameter grid \code{uv_grid}. It assumes that
+#' both manifolds are defined on the same parameter domain and that pointwise
+#' correspondence is given by identical \code{(u, v)} locations.
+#'
+#' @param f_ref A function representing the reference manifold. It should accept
+#'   input in \code{uv_grid} format and return an \eqn{n \times 3} matrix of 3D coordinates.
+#' @param f_cmp A function representing the comparison manifold (e.g., SIME or PME estimate).
+#'   Same interface as \code{f_ref}.
+#' @param uv_grid A data frame or matrix of parameter locations with columns \code{u} and \code{v}.
+#' @param seed Integer random seed for reproducibility (passed to data generation).
+#'
+#' @return A numeric value representing the mean squared distance between the two manifolds.
+#'
+#' @export
+calc_correspondence_msd <- function(f_ref,
+                                    f_cmp,
+                                    uv_grid,
+                                    seed = 123) {
+  ref_data <- generate_surface_data(
+    f = f_ref,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  cmp_data <- generate_surface_data(
+    f = f_cmp,
+    noise_sd = 0,
+    seed = seed,
+    uv_grid = uv_grid
+  )
+
+  if (!all(dim(ref_data$XYZ) == dim(cmp_data$XYZ))) {
+    stop("Reference and comparison manifolds do not have matching output dimensions.")
+  }
+
+  msd <- mean(rowSums((ref_data$XYZ - cmp_data$XYZ)^2))
+  return(msd)
+}
+
+########################################################################
+#######################################################################
+# theoretical variance estimator
+
 
 
 #' Compute Truncated Prior Kernel Matrix

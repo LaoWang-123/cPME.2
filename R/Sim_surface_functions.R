@@ -1,4 +1,131 @@
-### Simulation Datasets
+#### All Surface functions
+
+
+#' Construct Parametric Surface Functions
+#'
+#' Factory function for generating parametric surface mappings
+#' \eqn{f : \mathbb{R}^2 \to \mathbb{R}^3}.
+#'
+#' Supports multiple surface geometries including:
+#' \itemize{
+#'   \item \code{"bowl"}:
+#'     isotropic quadratic bowl
+#'     \eqn{z = \alpha(x^2 + y^2)}
+#'
+#'   \item \code{"saddle"}:
+#'     hyperbolic paraboloid
+#'     \eqn{z = \alpha x^2 - \beta y^2}
+#'
+#'   \item \code{"CC"}:
+#'     smooth nonlinear cortical-like surface used in simulations
+#' }
+#'
+#' The returned object is a function taking coordinates
+#' \code{(r1, r2)} and returning a matrix with columns
+#' \code{(x, y, z)}.
+#'
+#' @param surface_type Character string specifying the surface type.
+#'   One of:
+#'   \code{"bowl"},
+#'   \code{"saddle"},
+#'   or \code{"CC"}.
+#'
+#' @param alpha Numeric scalar controlling curvature magnitude.
+#'
+#' @param beta Numeric scalar controlling anisotropy or scaling.
+#'
+#' @param input_range Character string specifying the parameter domain.
+#'   One of:
+#'   \itemize{
+#'     \item \code{"minus1_1"}:
+#'       assumes inputs already lie in \eqn{[-1,1]^2}
+#'
+#'     \item \code{"0_1"}:
+#'       rescales inputs from \eqn{[0,1]^2} to \eqn{[-1,1]^2}
+#'   }
+#'
+#' @return
+#' A surface function of the form
+#' \code{f(r1, r2)},
+#' returning an \eqn{n \times 3} matrix with columns
+#' \code{x}, \code{y}, and \code{z}.
+#'
+#' @examples
+#' # Bowl surface
+#' f_bowl <- make_surface_function(
+#'   surface_type = "bowl",
+#'   alpha = 1,
+#'   beta = 1
+#' )
+#'
+#' # Saddle surface
+#' f_saddle <- make_surface_function(
+#'   surface_type = "saddle",
+#'   alpha = 1,
+#'   beta = 1
+#' )
+#'
+#' # Cortical-like surface
+#' f_CC <- make_surface_function(
+#'   surface_type = "CC",
+#'   alpha = 1,
+#'   beta = 1
+#' )
+#'
+#' @export
+make_surface_function <- function(
+    surface_type = c("bowl", "saddle", "CC"),
+    alpha,
+    beta,
+    input_range = c("minus1_1", "0_1")
+) {
+  surface_type <- match.arg(surface_type)
+  input_range  <- match.arg(input_range)
+
+  force(surface_type)
+  force(alpha)
+  force(beta)
+  force(input_range)
+
+  function(r1, r2) {
+
+    if (input_range == "0_1") {
+      u <- 2 * r1 - 1
+      v <- 2 * r2 - 1
+    } else {
+      u <- r1
+      v <- r2
+    }
+
+    if (surface_type == "bowl") {
+
+      x <- beta * u
+      y <- beta * v
+      z <- alpha * (x^2 + y^2)
+
+    } else if (surface_type == "saddle") {
+
+      x <- u
+      y <- v
+      z <- alpha * x^2 - beta * y^2
+
+    } else if (surface_type == "CC") {
+
+      x <- 2 * u
+      y <- v
+
+      z <- 0.7 * u +
+        (-0.05) * u^2 +
+        0.03 * u^4 +
+        (1 + 6 * (alpha - 1)) * exp(-2.0 * u^2) * u^2 +
+        (1 + 6 * (beta - 1)) * (0.18 - 0.28 * u) * v^2 -
+        0.03 * v^4
+    }
+
+    cbind(x = x, y = y, z = z)
+  }
+}
+
 
 #' Translate surface with a vector
 #'
@@ -236,114 +363,3 @@ combine_surface_functions <- function(f1, f2) {
   }
 }
 
-
-#' Compute manifold approximation error (MSD) with respect to a true surface
-#'
-#' This function computes the mean squared distance (MSD) between a true
-#' manifold \eqn{f_{\text{true}}} and an estimated manifold \eqn{\hat f}.
-#' The metric is defined as
-#' \deqn{
-#' \mathrm{MSD}(\hat f) = \mathbb{E} \left\| X - \hat f(\pi_{\hat f}(X)) \right\|^2,
-#' }
-#' @param f_hat A function representing the estimated manifold \eqn{\hat f},
-#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
-#' @param f_true A function representing the true manifold \eqn{f_{\text{true}}},
-#'   mapping from parameter space \eqn{U} to \eqn{\mathbb{R}^3}.
-#' @param uv_grid A matrix or data frame of parameter values (u, v) used to
-#'   generate samples from the true manifold.
-#' @param seed Integer seed for reproducibility when generating data.
-#' @param init_method Character string specifying the initialization method
-#'   for projection (passed to \code{pme_initial_guess}). Default is \code{"pca"}.
-#' @param return_xyz default FALSE
-#'
-#' @return A numeric scalar representing the mean squared distance (MSD)
-#'
-#' @export
-calc_manifold_msd <- function(f_hat,
-                              f_true,
-                              uv_grid,
-                              seed = 123,
-                              init_method = "pca",
-                              return_xyz = FALSE) {
-
-  # 1. generate true surface (no noise)
-  true_data <- generate_surface_data(
-    f_true,
-    noise_sd = 0,
-    seed = seed,
-    uv_grid = uv_grid
-  )
-
-  # 2. project true points onto estimated manifold
-  proj <- calc_params(
-    f = f_hat,
-    X = true_data$XYZ,
-    init_params = pme_initial_guess(true_data$XYZ, 2, init_method),
-    f_input = "vector"
-  )
-
-  # 3. reconstruct points from projection
-  fit <- generate_surface_data(
-    f_hat,
-    noise_sd = 0,
-    seed = seed,
-    uv_grid = proj
-  )
-
-  # 4. compute MSD
-  msd <- mean(rowSums((fit$XYZ - true_data$XYZ)^2))
-
-  if (return_xyz) {
-    return(list(
-      msd = msd,
-      fit_xyz = fit$XYZ,
-      true_xyz = true_data$XYZ
-    ))
-  }
-
-  return(msd)
-}
-
-
-#' Compute Mean Squared Distance Between Two Manifolds Under Parameter Correspondence
-#'
-#' This function computes the mean squared distance (MSD) between two manifold
-#' functions evaluated on a shared parameter grid \code{uv_grid}. It assumes that
-#' both manifolds are defined on the same parameter domain and that pointwise
-#' correspondence is given by identical \code{(u, v)} locations.
-#'
-#' @param f_ref A function representing the reference manifold. It should accept
-#'   input in \code{uv_grid} format and return an \eqn{n \times 3} matrix of 3D coordinates.
-#' @param f_cmp A function representing the comparison manifold (e.g., SIME or PME estimate).
-#'   Same interface as \code{f_ref}.
-#' @param uv_grid A data frame or matrix of parameter locations with columns \code{u} and \code{v}.
-#' @param seed Integer random seed for reproducibility (passed to data generation).
-#'
-#' @return A numeric value representing the mean squared distance between the two manifolds.
-#'
-#' @export
-calc_correspondence_msd <- function(f_ref,
-                                    f_cmp,
-                                    uv_grid,
-                                    seed = 123) {
-  ref_data <- generate_surface_data(
-    f = f_ref,
-    noise_sd = 0,
-    seed = seed,
-    uv_grid = uv_grid
-  )
-
-  cmp_data <- generate_surface_data(
-    f = f_cmp,
-    noise_sd = 0,
-    seed = seed,
-    uv_grid = uv_grid
-  )
-
-  if (!all(dim(ref_data$XYZ) == dim(cmp_data$XYZ))) {
-    stop("Reference and comparison manifolds do not have matching output dimensions.")
-  }
-
-  msd <- mean(rowSums((ref_data$XYZ - cmp_data$XYZ)^2))
-  return(msd)
-}
