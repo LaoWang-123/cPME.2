@@ -120,7 +120,7 @@ f_bowl <- function(uv, R = 1.0, c = 1.5) {
 ###################
 # surface function factor
 ##################
-make_surface_function <- function(R=1,
+make_surface_function_gamma <- function(R=1,
                                   c = 1.5,
                                   gamma_mode = "identity",
                                   au = 0.3, av = 0.25,
