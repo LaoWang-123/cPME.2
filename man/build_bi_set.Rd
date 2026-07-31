@@ -18,5 +18,6 @@ a list of bi, normailized of grad and grad rot basis functions
 Build bi set from basis_set
 }
 \examples{
+basis_set <- build_basis_set(2, 2, basis = neumann_basis)
 bi_set <- build_bi_set(basis_set)
 }

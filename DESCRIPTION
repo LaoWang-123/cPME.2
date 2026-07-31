@@ -9,6 +9,8 @@ Authors@R: c(
       role = c("aut", "cre")
     )
   )
+Author: Jane Doe [aut, cre]
+Maintainer: Jane Doe <jane@example.com>
 Description: More about what it does (maybe more than one line).
     Continuation lines should be indented.
 License: What license is it under?
@@ -17,6 +19,8 @@ LazyData: true
 URL: https://github.com/LaoWang-123/cPME.2
 BugReports: https://github.com/LaoWang-123/cPME.2/issues
 RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.1.0)
 LinkingTo: 
     BH,
     Rcpp,

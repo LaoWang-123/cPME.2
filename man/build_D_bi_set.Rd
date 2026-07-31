@@ -18,5 +18,6 @@ a list of D bi sets
 Build D_bi set from basis_set
 }
 \examples{
+basis_set <- build_basis_set(2, 2, basis = neumann_basis)
 D_bi_set <- build_D_bi_set(basis_set)
 }

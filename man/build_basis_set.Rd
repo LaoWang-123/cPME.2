@@ -16,6 +16,9 @@ build_basis_set(
 
 \item{Qmax}{Maximum frequency index in the second dimension.}
 
+\item{include_constant}{Logical; include the constant basis term when
+supported by the selected basis family.}
+
 \item{basis}{A basis object such as `fourier_basis`, `neumann_basis`,
 or `dirichlet_basis`, containing scalar/grad/rot/Jacobian generators,
 eigenvalue and norm functions, and minimally valid indices `p_min`, `q_min`.}
@@ -30,7 +33,7 @@ respecting the index constraints defined in the basis object
 (e.g. Dirichlet requires \eqn{p,q \ge 1}).
 }
 \examples{
-Bf <- build_basis_set(5, 5, fourier_basis)
-Bd <- build_basis_set(5, 5, dirichlet_basis)
+Bf <- build_basis_set(5, 5, basis = fourier_basis)
+Bd <- build_basis_set(5, 5, basis = dirichlet_basis)
 
 }

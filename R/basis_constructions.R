@@ -9,6 +9,8 @@
 #'
 #' @param Pmax Maximum frequency index in the first dimension.
 #' @param Qmax Maximum frequency index in the second dimension.
+#' @param include_constant Logical; include the constant basis term when
+#'   supported by the selected basis family.
 #' @param basis A basis object such as `fourier_basis`, `neumann_basis`,
 #'   or `dirichlet_basis`, containing scalar/grad/rot/Jacobian generators,
 #'   eigenvalue and norm functions, and minimally valid indices `p_min`, `q_min`.
@@ -16,8 +18,8 @@
 #' @return A named list of basis entries indexed by "p\_q".
 #'
 #' @examples
-#' Bf <- build_basis_set(5, 5, fourier_basis)
-#' Bd <- build_basis_set(5, 5, dirichlet_basis)
+#' Bf <- build_basis_set(5, 5, basis = fourier_basis)
+#' Bd <- build_basis_set(5, 5, basis = dirichlet_basis)
 #'
 #' @export
 build_basis_set <- function(Pmax, Qmax,include_constant = FALSE, basis=c(fourier_basis,neumann_basis,dirichlet_basis))
@@ -166,6 +168,7 @@ build_basis_grid <- function(
 #' @export
 #'
 #' @examples
+#' basis_set <- build_basis_set(2, 2, basis = neumann_basis)
 #' bi_set <- build_bi_set(basis_set)
 build_bi_set <- function(basis_set, mode = c("full", "div_free")) {
   mode <- match.arg(mode)
@@ -205,6 +208,7 @@ build_bi_set <- function(basis_set, mode = c("full", "div_free")) {
 #' @export
 #'
 #' @examples
+#' basis_set <- build_basis_set(2, 2, basis = neumann_basis)
 #' D_bi_set <- build_D_bi_set(basis_set)
 build_D_bi_set <- function(basis_set, mode = c("full", "div_free")) {
   mode <- match.arg(mode)

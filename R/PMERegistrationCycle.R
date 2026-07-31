@@ -296,6 +296,34 @@ PMERegistrationCycle <- R6::R6Class(
     #' Fit initial PME models, with optional template-projection f2 initialization.
     #' @return The object, invisibly.
     fit_initial = function() {
+      compute_E_from_inits <- function(pme1, pme2, init1, init2, n_grid = 10L) {
+        U1 <- as.matrix(init1$parameterization)
+        U2 <- as.matrix(init2$parameterization)
+
+        r1_min <- apply(U1, 2L, min)
+        r1_max <- apply(U1, 2L, max)
+        r2_min <- apply(U2, 2L, min)
+        r2_max <- apply(U2, 2L, max)
+
+        U_eval1 <- as.matrix(expand.grid(
+          seq(r1_min[1], r1_max[1], length.out = n_grid),
+          seq(r1_min[2], r1_max[2], length.out = n_grid)
+        ))
+        U_eval2 <- as.matrix(expand.grid(
+          seq(r2_min[1], r2_max[1], length.out = n_grid),
+          seq(r2_min[2], r2_max[2], length.out = n_grid)
+        ))
+
+        vals1 <- t(apply(U_eval1, 1L, function(u) {
+          pme1$embedding_map(as.numeric(u))
+        }))
+        vals2 <- t(apply(U_eval2, 1L, function(u) {
+          pme2$embedding_map(as.numeric(u))
+        }))
+
+        mean(rowSums((vals1 - vals2)^2))
+      }
+
       if (is.null(self$initialization_f1)) {
         self$initialization_f1 <- private$.init_pme(
           dataX = self$data1,
@@ -312,15 +340,15 @@ PMERegistrationCycle <- R6::R6Class(
         )
       }
 
-      if (is.null(self$initialization_f2)) {
-        self$initialization_f2 <- private$.init_pme(
-          dataX = self$data2,
-          init_args = self$init_args_f2,
-          rescale = FALSE
-        )
-      }
-
       if (self$init_strategy_f2 == "template_projection_original") {
+        if (is.null(self$initialization_f2)) {
+          self$initialization_f2 <- private$.init_pme(
+            dataX = self$data2,
+            init_args = self$init_args_f2,
+            rescale = FALSE
+          )
+        }
+
         template_centers <- as.matrix(self$initialization_f1$centers)
         template_params <- as.matrix(self$pme1_initial$params_opt)
         subject_centers <- as.matrix(self$initialization_f2$centers)
@@ -350,6 +378,110 @@ PMERegistrationCycle <- R6::R6Class(
           init_params = init_guess,
           f_input = "vector"
         )
+      } else if (self$init_strategy_f2 == "isomap" &&
+                 is.null(self$pme2_initial)) {
+        if (is.null(self$initialization_f2)) {
+          max_tries <- max(1L, as.integer(self$init_trials))
+          cand_inits <- vector("list", max_tries)
+          cand_checks <- vector("list", max_tries)
+
+          for (i in seq_len(max_tries)) {
+            init2_i <- private$.init_pme(
+              dataX = self$data2,
+              init_args = self$init_args_f2,
+              rescale = FALSE
+            )
+            chk_i <- check_pme_orientation(
+              init1 = self$initialization_f1,
+              init2 = init2_i,
+              pca_source = "all_centers",
+              verbose = self$verbose
+            )
+
+            cand_inits[[i]] <- init2_i
+            cand_checks[[i]] <- chk_i
+          }
+
+          keep <- which(vapply(
+            cand_checks,
+            function(chk) !identical(chk$final, "mirror_reversed"),
+            logical(1)
+          ))
+
+          if (length(keep) == 0L) {
+            stop(sprintf(
+              "[fit_initial] all f2 initializations are mirror_reversed across %d trials.",
+              max_tries
+            ))
+          }
+
+          cand_inits <- cand_inits[keep]
+          cand_checks <- cand_checks[keep]
+
+          if (self$verbose) {
+            message(sprintf(
+              "[fit_initial] init pool %d -> %d after orientation filter.",
+              max_tries, length(cand_inits)
+            ))
+          }
+        } else {
+          cand_inits <- list(self$initialization_f2)
+          cand_checks <- list(list(final = "user_provided"))
+        }
+
+        n_cand <- length(cand_inits)
+        cand_pme2 <- vector("list", n_cand)
+        cand_E <- rep(Inf, n_cand)
+
+        cand_pme2[[1]] <- private$.fit_pme(
+          dataX = self$data2,
+          pme_args = self$pme_args_f2,
+          initialization = cand_inits[[1]]
+        )
+        cand_E[1] <- compute_E_from_inits(
+          self$pme1_initial,
+          cand_pme2[[1]],
+          self$initialization_f1,
+          cand_inits[[1]]
+        )
+
+        lambda_reuse <- cand_pme2[[1]]$tuning
+        if (n_cand >= 2L) {
+          for (i in 2:n_cand) {
+            cand_pme2[[i]] <- private$.fit_pme(
+              dataX = self$data2,
+              pme_args = self$pme_args_f2,
+              initialization = cand_inits[[i]],
+              lambda = lambda_reuse
+            )
+            cand_E[i] <- compute_E_from_inits(
+              self$pme1_initial,
+              cand_pme2[[i]],
+              self$initialization_f1,
+              cand_inits[[i]]
+            )
+          }
+        }
+
+        best_idx <- which.min(cand_E)
+        self$initialization_f2 <- cand_inits[[best_idx]]
+        self$pme2_initial <- cand_pme2[[best_idx]]
+        self$init_history$fit_initial <- list(
+          init_strategy_f2 = self$init_strategy_f2,
+          n_trials_requested = if (exists("max_tries")) max_tries else n_cand,
+          n_candidates = n_cand,
+          best_idx = best_idx,
+          candidate_E = cand_E,
+          candidate_checks = cand_checks,
+          lambda_reuse = lambda_reuse
+        )
+
+        if (self$verbose) {
+          message(sprintf(
+            "[fit_initial] selected candidate %d/%d with E=%.6g",
+            best_idx, n_cand, cand_E[best_idx]
+          ))
+        }
       }
 
       if (is.null(self$pme2_initial)) {

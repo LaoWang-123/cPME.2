@@ -5,5 +5,7 @@ NULL
 
 ## usethis namespace: start
 #' @importFrom Rcpp evalCpp
+#' @importFrom grDevices rgb
+#' @importFrom stats rnorm
 ## usethis namespace: end
 NULL
