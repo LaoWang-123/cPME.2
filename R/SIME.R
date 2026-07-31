@@ -215,369 +215,6 @@ SIME <- function(
   )
 }
 
-
-
-############################################################
-## Validation projection MSD
-############################################################
-calc_validation_proj_msd <- function(val_data, fit_obj) {
-  val_data <- as.matrix(val_data)
-  if (nrow(val_data) == 0) return(NA_real_)
-  embedding_map <- fit_obj$embedding_map
-
-  # calc_params with pca initialization
-  init_params_val <- pme_initial_guess(X = val_data, d = 2, method = "pca")
-
-  val_params_opt <- calc_params(
-    f = embedding_map,
-    X = val_data,
-    init_params = init_params_val,
-    f_input = "vector"
-  )
-
-  val_proj <- t(apply(val_params_opt, 1, function(u) {
-    as.numeric(embedding_map(as.numeric(u)))
-  }))
-
-  mean(rowSums((val_data - val_proj)^2))
-}
-
-
-#' Cross-validation selection of the structural weight \eqn{\eta} for SIME
-#'
-#' Performs K-fold cross-validation to select the optimal structural weight
-#' \eqn{\eta} for the SIME (Structure-Informed Manifold Estimation) model.
-#' For each candidate \eqn{\eta}, the procedure:
-#'
-#' \enumerate{
-#' \item Splits the data into K folds.
-#' \item For each fold, initializes the PME manifold using \code{initialize_pme()}.
-#' \item On the first fold, runs \code{SIME()} with the full \code{lambda} grid
-#'       to determine the optimal smoothing parameter.
-#' \item Uses this selected \code{lambda} for the remaining folds to reduce
-#'       computation time.
-#' \item Computes validation projection MSD (mean squared distance) between
-#'       validation data and the fitted manifold.
-#' }
-#'
-#' The \eqn{\eta} with the smallest average validation MSD is selected, and the
-#' final SIME model is refit on the full dataset using the selected
-#' \eqn{\eta} and corresponding \code{lambda}.
-#'
-#' @param f1_fun Function representing the reference manifold (typically
-#'   obtained from MRI PME). Takes a parameter vector \eqn{u} and returns a
-#'   point in the ambient space.
-#'
-#' @param f2_fun Function representing the current PET manifold estimate (eta=0) used
-#'   to update the parameterization of initialization centers.
-#'
-#' @param data2 A numeric matrix of observations used to fit the PET manifold.
-#'   Rows correspond to data points and columns correspond to ambient
-#'   coordinates.
-#'
-#' @param eta_vec Numeric vector of candidate \eqn{\eta} values controlling the
-#'   strength of structural anchoring toward \code{f1_fun}.
-#'
-#' @param lambda Numeric vector of smoothing parameters used by \code{SIME()}.
-#'   The first fold selects the optimal value.
-#'
-#' @param K Integer. Number of cross-validation folds.
-#'
-#' @param d Intrinsic dimension of the manifold (default = 2).
-#'
-#' @param epsilon Convergence threshold for the inner SIME optimization loop.
-#'
-#' @param max_iter Maximum number of iterations allowed in the SIME fitting
-#'   procedure.
-#'
-#' @param SSD_ratio_threshold Threshold used for stability control during
-#'   the SIME optimization iterations.
-#'
-#' @param init_args_f2 A list of arguments passed to \code{initialize_pme()}
-#'   when generating fold-specific manifold initializations.
-#'
-#' @param seed Optional random seed used for reproducible fold assignment.
-#'
-#' @param verbose Logical. If TRUE, prints progress messages during
-#'   cross-validation.
-#'
-#' @return A list containing:
-#' \describe{
-#'   \item{best_eta}{Selected value of \eqn{\eta}.}
-#'   \item{best_lambda}{Selected smoothing parameter.}
-#'   \item{eta_mean_msd}{Average validation MSD for each candidate \eqn{\eta}.}
-#'   \item{eta_fold_msd}{Fold-wise validation MSD values.}
-#'   \item{eta_lambda_star}{Selected \code{lambda} for each \eqn{\eta}.}
-#'   \item{final_fit}{Final SIME model fitted on the full dataset.}
-#' }
-#'
-#' @details
-#' Initialization is performed once per fold using \code{initialize_pme()} and
-#' reused across candidate \eqn{\eta} values to avoid redundant computation.
-#'
-#' Validation error is measured using projection mean squared distance (MSD),
-#' computed by projecting validation points onto the fitted manifold.
-#'
-#' @examples
-#' \dontrun{
-#' cv_fit <- SIME_cv(
-#'   f1_fun = f1_fun,
-#'   f2_fun = f2_fun,
-#'   data2 = data2,
-#'   eta_vec = c(0.01, 0.05, 0.1, 0.5),
-#'   lambda = exp(-15:5),
-#'   K = 5
-#' )
-#'
-#' cv_fit$best_eta
-#' cv_fit$best_lambda
-#' }
-#'
-#' @export
-SIME_cv <- function(
-    f1_fun,
-    f2_fun,
-    data2,
-    eta_vec = c(exp(-15:-2),0.1,exp(-1:5)),
-    lambda = exp(-15:5),
-    K = 10,
-    d = 2,
-    epsilon = 1,
-    max_iter = 100,
-    SSD_ratio_threshold = 5,
-    init_args_f2 = list(
-      min_clusters = 10,
-      alpha = 0.01,
-      max_clusters = 100,
-      algorithm = "isomap",
-      rescale = FALSE,
-      component_type = "centers",
-      subsample_size = 5,
-      d=2
-    ),
-    seed = NULL,
-    verbose = TRUE
-) {
-  data2 <- as.matrix(data2)
-  n <- nrow(data2)
-
-  if (length(eta_vec) < 1) stop("eta_vec must contain at least one value.")
-  if (K < 2) stop("K must be at least 2.")
-  if (n < K) stop("n must be >= K.")
-
-  if (!is.null(seed)) set.seed(seed)
-
-  ##########################################################
-  ## Make folds once
-  ##########################################################
-  perm <- sample(seq_len(n))
-  fold_id <- rep(seq_len(K), length.out = n)
-  folds <- split(perm, fold_id)
-
-  ##########################################################
-  ## Precompute train/val split and init2 for each fold once
-  ##########################################################
-  train_data_list <- vector("list", K)
-  val_data_list   <- vector("list", K)
-  init2_list      <- vector("list", K)
-
-  for (k in seq_len(K)) {
-    val_idx <- folds[[k]]
-    train_idx <- setdiff(seq_len(n), val_idx)
-
-    train_data_list[[k]] <- data2[train_idx, , drop = FALSE]
-    val_data_list[[k]]   <- data2[val_idx, , drop = FALSE]
-
-    init2_k <- do.call(
-      initialize_pme,
-      c(list(x = train_data_list[[k]]),
-        init_args_f2)
-    )
-
-    init2_k$parameterization <- calc_params(
-      f = f2_fun,
-      X = init2_k$centers,
-      init_params = init2_k$parameterization,
-      f_input = "vector" # the f2_fun come from pme_embedding function directly, so it is vector.
-    )
-
-    init2_list[[k]] <- init2_k
-  }
-
-
-  if (verbose) {
-    message("==================================================")
-    message(sprintf("Precomputing init2 for %d folds", K))
-    message("==================================================")
-  }
-  ##########################################################
-  ## Storage over eta
-  ##########################################################
-  eta_mean_msd <- rep(NA_real_, length(eta_vec))
-  eta_fold_msd <- vector("list", length(eta_vec))
-  eta_lambda_star <- rep(NA_real_, length(eta_vec))
-
-  ##########################################################
-  ## Loop over eta
-  ##########################################################
-  for (e in seq_along(eta_vec)) {
-    eta_now <- eta_vec[e]
-
-    if (verbose) {
-      message("==================================================")
-      message(sprintf("Evaluating eta = %g", eta_now))
-      message("==================================================")
-    }
-
-    fold_msd <- rep(NA_real_, K)
-
-    #######################################################
-    ## Fold 1: full lambda vector, let SIME choose lambda
-    #######################################################
-    fit1 <- SIME(
-      f1_fun = f1_fun,
-      init2 = init2_list[[1]],
-      data2 = train_data_list[[1]],
-      eta = eta_now,
-      lambda = lambda,
-      d = d,
-      epsilon = epsilon,
-      max_iter = max_iter,
-      SSD_ratio_threshold = SSD_ratio_threshold,
-      verbose = FALSE
-    )
-
-    lambda_star <- fit1$tuning
-    fold_msd[1] <- calc_validation_proj_msd(val_data_list[[1]], fit1)
-
-    eta_lambda_star[e] <- lambda_star
-
-    if (verbose) {
-      message(sprintf(
-        "eta = %g, fold 1 selected lambda = %g, val MSD = %g",
-        eta_now, lambda_star, fold_msd[1]
-      ))
-    }
-
-    #######################################################
-    ## Folds 2..K: fixed lambda_star
-    #######################################################
-    if (K >= 2) {
-      for (k in 2:K) {
-        # if (verbose) {
-        #   message(sprintf(
-        #     "eta = %g, fold %d: running fixed lambda = %g",
-        #     eta_now, k, lambda_star
-        #   ))
-        # }
-
-        fit_k <- SIME(
-          f1_fun = f1_fun,
-          init2 = init2_list[[k]],
-          data2 = train_data_list[[k]],
-          eta = eta_now,
-          lambda = lambda_star,
-          d = d,
-          epsilon = epsilon,
-          max_iter = max_iter,
-          SSD_ratio_threshold = SSD_ratio_threshold,
-          verbose = FALSE
-        )
-
-        fold_msd[k] <- calc_validation_proj_msd(val_data_list[[k]], fit_k)
-
-        # if (verbose) {
-        #   message(sprintf(
-        #     "eta = %g, fold %d: val MSD = %g",
-        #     eta_now, k, fold_msd[k]
-        #   ))
-        # }
-      }
-    }
-
-    eta_fold_msd[[e]] <- fold_msd
-    eta_mean_msd[e] <- mean(fold_msd, na.rm = TRUE)
-
-    if (verbose) {
-      message(sprintf(
-        "eta = %g, mean CV MSD = %g",
-        eta_now, eta_mean_msd[e]
-      ))
-    }
-
-    #######################################################
-    ## Early stop over eta: last 4 mean CV MSD nondecreasing
-    #######################################################
-    if (e >= 4) {
-      if (!is.unsorted(eta_mean_msd[(e - 3):e])) {
-        if (verbose) {
-          message("Early stopping on eta: last 4 mean CV MSD values are nondecreasing.")
-        }
-        break
-      }
-    }
-  }
-
-  ##########################################################
-  ## Select best eta
-  ##########################################################
-  best_eta_idx <- min(which(eta_mean_msd == min(eta_mean_msd, na.rm = TRUE)))
-  best_eta <- eta_vec[best_eta_idx]
-  best_lambda <- eta_lambda_star[best_eta_idx]
-
-  if (verbose) {
-    message("==================================================")
-    message(sprintf("Best eta = %g", best_eta))
-    message(sprintf("Corresponding lambda = %g", best_lambda))
-    message("==================================================")
-  }
-
-  ##########################################################
-  ## Final refit on full data
-  ##########################################################
-  init2_full <- do.call(
-    initialize_pme,
-    c(list(x = data2),
-      init_args_f2)
-  )
-
-  init2_full$parameterization <- calc_params(
-    f = f2_fun,
-    X = init2_full$centers,
-    init_params = init2_full$parameterization,
-    f_input = "vector"
-  )
-
-  final_fit <- SIME(
-    f1_fun = f1_fun,
-    init2 = init2_full,
-    data2 = data2,
-    eta = best_eta,
-    lambda = best_lambda,
-    d = d,
-    epsilon = epsilon,
-    max_iter = max_iter,
-    SSD_ratio_threshold = SSD_ratio_threshold,
-    verbose = verbose
-  )
-
-  list(
-    folds = folds,
-    train_data_list = train_data_list,
-    val_data_list = val_data_list,
-    init2_list = init2_list,
-    eta_vec = eta_vec,
-    lambda_grid = lambda,
-    eta_mean_msd = eta_mean_msd,
-    eta_fold_msd = eta_fold_msd,
-    eta_lambda_star = eta_lambda_star,
-    best_eta = best_eta,
-    SIME_final = final_fit
-  )
-}
-
-
-
 #' Select eta by threshold rule with early stopping
 #'
 #' Fit SIME along an increasing eta grid. Use the baseline MSD from f2_fun
@@ -759,4 +396,382 @@ SIME_select <- function(
     selected_eta = selected_eta,
     selected_fit = selected_fit
   )
+}
+
+
+#' Select eta for one or more threshold multipliers along one SIME path
+#'
+#' This is an experimental multi-\code{c} wrapper for \code{SIME_select()}.
+#' For a single \code{c}, it returns the same core fields as \code{SIME_select()}
+#' and adds optional shrinkage metrics. For multiple \code{c} values, it fits
+#' each eta at most once and reuses the fitted path when moving from smaller to
+#' larger thresholds.
+#'
+#' @param f1_fun Reference manifold function.
+#' @param f2_fun Baseline target manifold function.
+#' @param data2 Raw target data matrix (n x D).
+#' @param c Positive threshold multiplier(s). Values are evaluated increasingly.
+#' @param eta_vec Candidate eta values. Will be sorted increasingly.
+#' @param lambda Candidate lambda values for \code{SIME()}.
+#' @param d Intrinsic dimension.
+#' @param epsilon,max_iter,SSD_ratio_threshold Same as in \code{SIME()}.
+#' @param init_args_f2 Arguments passed to \code{initialize_pme()}.
+#' @param seed Optional random seed.
+#' @param output_mode Output size mode. \code{"compact"} keeps only selected
+#'   unique eta fits; \code{"full"} keeps every evaluated eta fit.
+#' @param shrinkage_grid Parameter grid used for shrinkage. If \code{NULL},
+#'   a 40 by 40 disk grid from \code{make_uv_grid()} is used.
+#' @param shrinkage_seed Seed passed to \code{calc_correspondence_msd()}.
+#' @param verbose Logical.
+#'
+#' @return A list with \code{summary}, \code{eta_path}, and \code{fits}. In
+#'   compact mode, \code{fits} stores only selected unique eta fits. In full
+#'   mode, \code{fits} stores every evaluated eta fit.
+#' @export
+SIME_select_path <- function(
+    f1_fun,
+    f2_fun,
+    data2,
+    c = 1.3,
+    eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
+    lambda = exp(-15:5),
+    d = 2,
+    epsilon = 1,
+    max_iter = 100,
+    SSD_ratio_threshold = 5,
+    init_args_f2 = list(
+      min_clusters = 10,
+      alpha = 0.01,
+      max_clusters = 100,
+      algorithm = "isomap",
+      rescale = FALSE,
+      component_type = "centers",
+      subsample_size = 5,
+      d = 2
+    ),
+    seed = NULL,
+    output_mode = c("compact", "full"),
+    shrinkage_grid = NULL,
+    shrinkage_seed = 123,
+    verbose = TRUE
+) {
+
+  output_mode <- match.arg(output_mode)
+
+  data2 <- as.matrix(data2)
+  D <- ncol(data2)
+
+  c_input <- as.numeric(c)
+  if (any(!is.finite(c_input)) || any(c_input <= 0)) {
+    stop("c must contain positive finite values.")
+  }
+  c_values <- sort(unique(c_input))
+
+  eta_vec <- sort(unique(as.numeric(eta_vec)))
+  lambda <- as.numeric(lambda)
+
+  if (!is.null(seed)) set.seed(seed)
+
+  if (is.null(shrinkage_grid)) {
+    shrinkage_grid <- make_uv_grid(n_u = 40, n_v = 40, grid_type = "disk")
+  }
+
+  compute_saved_shrinkage <- function(fits) {
+    empty <- data.frame(
+      fit_ref = character(0),
+      sime_to_f1_msd = numeric(0),
+      sime_to_f2_msd = numeric(0),
+      f2_to_f1_msd = numeric(0),
+      shrinkage = numeric(0),
+      stringsAsFactors = FALSE
+    )
+    if (length(fits) == 0L) {
+      return(empty)
+    }
+
+    f1_data <- generate_surface_data(
+      f = f1_fun,
+      noise_sd = 0,
+      seed = shrinkage_seed,
+      uv_grid = shrinkage_grid
+    )
+    f2_data <- generate_surface_data(
+      f = f2_fun,
+      noise_sd = 0,
+      seed = shrinkage_seed,
+      uv_grid = shrinkage_grid
+    )
+
+    if (!all(dim(f1_data$XYZ) == dim(f2_data$XYZ))) {
+      stop("Reference and baseline manifolds do not have matching output dimensions.")
+    }
+
+    f2_to_f1_msd <- mean(rowSums((f2_data$XYZ - f1_data$XYZ)^2))
+
+    rows <- lapply(names(fits), function(fit_ref) {
+      fit <- fits[[fit_ref]]
+      sime_data <- generate_surface_data(
+        f = fit$embedding_map,
+        noise_sd = 0,
+        seed = shrinkage_seed,
+        uv_grid = shrinkage_grid
+      )
+      if (!all(dim(sime_data$XYZ) == dim(f1_data$XYZ))) {
+        stop("SIME and reference manifolds do not have matching output dimensions.")
+      }
+
+      sime_to_f1_msd <- mean(rowSums((sime_data$XYZ - f1_data$XYZ)^2))
+      sime_to_f2_msd <- mean(rowSums((sime_data$XYZ - f2_data$XYZ)^2))
+      shrinkage_ratio <- if (isTRUE(all.equal(f2_to_f1_msd, 0))) {
+        NA_real_
+      } else {
+        1 - sime_to_f1_msd / f2_to_f1_msd
+      }
+
+      data.frame(
+        fit_ref = fit_ref,
+        sime_to_f1_msd = sime_to_f1_msd,
+        sime_to_f2_msd = sime_to_f2_msd,
+        f2_to_f1_msd = f2_to_f1_msd,
+        shrinkage = shrinkage_ratio,
+        stringsAsFactors = FALSE
+      )
+    })
+
+    do.call(rbind, rows)
+  }
+
+  if (verbose) {
+    message("==================================================")
+    message("Initializing PME on full data")
+    message("==================================================")
+  }
+
+  init2 <- do.call(
+    initialize_pme,
+    c(list(x = data2), init_args_f2)
+  )
+
+  init2$parameterization <- calc_params(
+    f = f2_fun,
+    X = init2$centers,
+    init_params = init2$parameterization,
+    f_input = "vector"
+  )
+
+  baseline_msd <- calc_msd(
+    x = data2,
+    km = init2$km,
+    f = f2_fun,
+    t = init2$parameterization,
+    D = D,
+    d = d
+  )
+
+  thresholds <- c_values * baseline_msd
+
+  eta_fit_msd <- rep(NA_real_, length(eta_vec))
+  eta_lambda_star <- rep(NA_real_, length(eta_vec))
+  eta_fit_list <- vector("list", length(eta_vec))
+  eta_error_message <- rep(NA_character_, length(eta_vec))
+  names(eta_fit_list) <- paste0("eta_", seq_along(eta_vec))
+
+  selected_idx <- rep(NA_integer_, length(c_values))
+  stop_idx <- rep(NA_integer_, length(c_values))
+  c_error_message <- rep(NA_character_, length(c_values))
+  names(selected_idx) <- names(stop_idx) <- as.character(c_values)
+
+  eta_start <- 1L
+  for (i in seq_along(c_values)) {
+    c_now <- c_values[i]
+    threshold_now <- thresholds[i]
+    if (i > 1L) {
+      selected_idx[i] <- selected_idx[i - 1L]
+    }
+
+    if (verbose) {
+      message(sprintf(
+        "Selecting eta for c = %g; threshold = %g * %g = %g",
+        c_now, c_now, baseline_msd, threshold_now
+      ))
+    }
+
+    if (eta_start > length(eta_vec)) {
+      selected_idx[i] <- length(eta_vec)
+      next
+    }
+
+    for (e in eta_start:length(eta_vec)) {
+      eta_now <- eta_vec[e]
+
+      if (is.null(eta_fit_list[[e]])) {
+        fit_e <- tryCatch(
+          SIME(
+            f1_fun = f1_fun,
+            init2 = init2,
+            data2 = data2,
+            eta = eta_now,
+            lambda = lambda,
+            d = d,
+            epsilon = epsilon,
+            max_iter = max_iter,
+            SSD_ratio_threshold = SSD_ratio_threshold,
+            verbose = FALSE
+          ),
+          error = function(err) err
+        )
+
+        if (inherits(fit_e, "error")) {
+          eta_error_message[e] <- conditionMessage(fit_e)
+          c_error_message[i] <- eta_error_message[e]
+          stop_idx[i] <- e
+          if (verbose) {
+            message(sprintf(
+              "eta = %g failed: %s. Return NA for this c and continue.",
+              eta_now, eta_error_message[e]
+            ))
+          }
+          eta_start <- e + 1L
+          break
+        }
+
+        idx_star <- match(fit_e$tuning, fit_e$tuning_vec)
+        if (is.na(idx_star)) idx_star <- which.min(fit_e$MSD)
+
+        eta_fit_msd[e] <- fit_e$MSD[idx_star]
+        eta_lambda_star[e] <- fit_e$tuning
+        eta_fit_list[[e]] <- fit_e
+      } else if (!is.na(eta_error_message[e])) {
+        c_error_message[i] <- eta_error_message[e]
+        stop_idx[i] <- e
+        eta_start <- e + 1L
+        break
+      }
+
+      if (eta_fit_msd[e] <= threshold_now) {
+        selected_idx[i] <- e
+      } else {
+        stop_idx[i] <- e
+        if (verbose) {
+          message(sprintf(
+            "eta = %g, lambda* = %g, MSD = %g > threshold = %g. Move to next c.",
+            eta_now, eta_lambda_star[e], eta_fit_msd[e], threshold_now
+          ))
+        }
+        break
+      }
+
+      if (verbose) {
+        message(sprintf(
+          "eta = %g, lambda* = %g, MSD = %g <= threshold = %g",
+          eta_now, eta_lambda_star[e], eta_fit_msd[e], threshold_now
+        ))
+      }
+    }
+
+    if (!is.na(selected_idx[i])) {
+      eta_start <- selected_idx[i] + 1L
+    }
+  }
+
+  selected_eta <- ifelse(is.na(selected_idx), NA_real_, eta_vec[selected_idx])
+  selected_lambda <- ifelse(is.na(selected_idx), NA_real_, eta_lambda_star[selected_idx])
+  selected_msd <- ifelse(is.na(selected_idx), NA_real_, eta_fit_msd[selected_idx])
+
+  fit_ref <- ifelse(is.na(selected_idx), NA_character_, names(eta_fit_list)[selected_idx])
+
+  summary <- data.frame(
+    c = c_values,
+    baseline_msd = baseline_msd,
+    threshold = thresholds,
+    selected_eta = selected_eta,
+    selected_lambda = selected_lambda,
+    selected_msd = selected_msd,
+    selected_fit_ref = as.character(fit_ref),
+    error_message = c_error_message,
+    stringsAsFactors = FALSE
+  )
+
+  evaluated <- !vapply(eta_fit_list, is.null, logical(1))
+  eta_path <- data.frame(
+    eta_index = seq_along(eta_vec),
+    eta = eta_vec,
+    fit_msd = eta_fit_msd,
+    lambda_star = eta_lambda_star,
+    evaluated = evaluated,
+    error_message = eta_error_message,
+    stringsAsFactors = FALSE
+  )
+
+  keep_idx <- which(evaluated)
+  if (output_mode == "compact") {
+    keep_idx <- sort(unique(selected_idx[!is.na(selected_idx)]))
+  }
+  fits <- eta_fit_list[keep_idx]
+  saved_shrinkage <- compute_saved_shrinkage(fits)
+
+  summary$sime_to_f1_msd <- NA_real_
+  summary$sime_to_f2_msd <- NA_real_
+  summary$f2_to_f1_msd <- NA_real_
+  summary$shrinkage <- NA_real_
+  if (nrow(saved_shrinkage) > 0L) {
+    idx <- match(summary$selected_fit_ref, saved_shrinkage$fit_ref)
+    keep <- !is.na(idx)
+    summary$sime_to_f1_msd[keep] <- saved_shrinkage$sime_to_f1_msd[idx[keep]]
+    summary$sime_to_f2_msd[keep] <- saved_shrinkage$sime_to_f2_msd[idx[keep]]
+    summary$f2_to_f1_msd[keep] <- saved_shrinkage$f2_to_f1_msd[idx[keep]]
+    summary$shrinkage[keep] <- saved_shrinkage$shrinkage[idx[keep]]
+  }
+
+  list(
+    rule = "largest eta with SIME MSD <= c * baseline MSD; multiple c values share one increasing eta path",
+    output_mode = output_mode,
+    c = c_values,
+    summary = summary,
+    eta_path = eta_path,
+    fits = fits,
+    shrinkage_grid = shrinkage_grid
+  )
+}
+
+
+#' Extract a selected SIME fit from SIME_select or SIME_select_path output
+#'
+#' @param result A \code{SIME_select()} or \code{SIME_select_path()} result.
+#' @param c Optional c value. Required when \code{result} contains multiple
+#'   selected c values.
+#'
+#' @return The selected SIME fit object, or \code{NULL} if that c has no
+#'   selected fit.
+#' @export
+select_SIME_fit <- function(result, c = NULL) {
+  selected_fit <- result[["selected_fit", exact = TRUE]]
+  if (!is.null(selected_fit)) {
+    return(selected_fit)
+  }
+
+  summary <- result[["summary", exact = TRUE]]
+  fits <- result[["fits", exact = TRUE]]
+  if (is.null(summary) || is.null(fits)) {
+    stop("result must be a SIME_select() or SIME_select_path() object.")
+  }
+
+  if (is.null(c)) {
+    ok <- which(!is.na(summary$selected_fit_ref))
+    if (length(ok) != 1L) {
+      stop("c must be supplied when the result contains multiple selected fits.")
+    }
+    row_idx <- ok
+  } else {
+    row_idx <- which(summary$c == as.numeric(c))
+    if (length(row_idx) != 1L) {
+      stop("Requested c was not found in result$summary$c.")
+    }
+  }
+
+  fit_ref <- summary$selected_fit_ref[row_idx]
+  if (is.na(fit_ref) || !nzchar(fit_ref)) {
+    return(NULL)
+  }
+  fits[[fit_ref]]
 }
