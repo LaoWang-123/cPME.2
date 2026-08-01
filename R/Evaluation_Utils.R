@@ -460,6 +460,7 @@ empty_volume_result <- function(message,
                                 partition_index,
                                 partition_plane,
                                 ref,
+                                ref_method,
                                 classification_method,
                                 volume_multiplier,
                                 warning_enabled = TRUE) {
@@ -479,6 +480,7 @@ empty_volume_result <- function(message,
     partition_index = partition_index,
     partition_plane = partition_plane,
     ref = ref,
+    ref_method = ref_method,
     classification_method = classification_method,
     fit_types = c(part1 = NA_character_, part2 = NA_character_),
     volume_multiplier = volume_multiplier,
@@ -501,6 +503,37 @@ safe_extract_volume_components <- function(fit, label) {
         class = "volume_component_error"
       )
     }
+  )
+}
+
+resolve_volume_ref_point <- function(ref, data, partition_plane = NULL) {
+  if (!is.null(ref)) {
+    return(list(
+      ref = as.numeric(ref)[1:3],
+      ref_method = "user_supplied"
+    ))
+  }
+
+  data <- as.matrix(data)[, 1:3, drop = FALSE]
+  data_centroid <- colMeans(data, na.rm = TRUE)
+
+  if (!is.null(partition_plane) &&
+      !is.null(partition_plane$center) &&
+      !is.null(partition_plane$normal)) {
+    plane_center <- as.numeric(partition_plane$center)[1:3]
+    plane_normal <- as.numeric(partition_plane$normal)[1:3]
+    plane_normal <- plane_normal / sqrt(sum(plane_normal^2))
+    signed_offset <- sum((data_centroid - plane_center) * plane_normal)
+
+    return(list(
+      ref = data_centroid - signed_offset * plane_normal,
+      ref_method = "data_centroid_projected_to_partition_plane"
+    ))
+  }
+
+  list(
+    ref = data_centroid,
+    ref_method = "data_centroid"
   )
 }
 
@@ -529,8 +562,9 @@ safe_extract_volume_components <- function(fit, label) {
 #' @param partition_plane Optional list with `center` and `normal` fields. If
 #'   supplied, candidates are assigned to part 1 or part 2 by signed distance to
 #'   this plane.
-#' @param ref A known interior reference point in the same coordinate system as
-#'   `data`.
+#' @param ref Optional known interior reference point in the same coordinate
+#'   system as `data`. If \code{NULL}, the data centroid is projected onto
+#'   \code{partition_plane} when available; otherwise the data centroid is used.
 #' @param data_max Optional numeric length-3 scale. If supplied, candidates are
 #'   sampled from `[-data_max, data_max]` rather than the data bounding box.
 #' @param volume_multiplier Multiplier applied to the estimated volume, for
@@ -557,7 +591,7 @@ estimate_partitioned_surface_volume <- function(
     limit_scaler = 0.05,
     partition_index = 3,
     partition_plane = NULL,
-    ref = c(0, 0, 0),
+    ref = NULL,
     data_max = NULL,
     volume_multiplier = 1,
     classification_method = c("partition_side", "both_surfaces"),
@@ -571,6 +605,14 @@ estimate_partitioned_surface_volume <- function(
   if (!partition_index %in% 1:3) {
     stop("partition_index must be 1, 2, or 3.")
   }
+
+  ref_info <- resolve_volume_ref_point(
+    ref = ref,
+    data = data,
+    partition_plane = partition_plane
+  )
+  ref <- ref_info$ref
+  ref_method <- ref_info$ref_method
 
   component_part1 <- safe_extract_volume_components(fit_part1, "fit_part1")
   component_part2 <- safe_extract_volume_components(fit_part2, "fit_part2")
@@ -597,6 +639,7 @@ estimate_partitioned_surface_volume <- function(
       partition_index = partition_index,
       partition_plane = partition_plane,
       ref = ref,
+      ref_method = ref_method,
       classification_method = classification_method,
       volume_multiplier = volume_multiplier,
       warning_enabled = warn_on_failure
@@ -662,6 +705,7 @@ estimate_partitioned_surface_volume <- function(
       partition_index = partition_index,
       partition_plane = partition_plane,
       ref = ref,
+      ref_method = ref_method,
       classification_method = classification_method,
       volume_multiplier = volume_multiplier,
       warning_enabled = warn_on_failure
@@ -689,6 +733,7 @@ estimate_partitioned_surface_volume <- function(
     partition_index = partition_index,
     partition_plane = partition_plane,
     ref = ref,
+    ref_method = ref_method,
     classification_method = classification_method,
     volume_multiplier = volume_multiplier,
     volume_success = TRUE,

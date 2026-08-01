@@ -12,7 +12,7 @@ estimate_partitioned_surface_volume(
   limit_scaler = 0.05,
   partition_index = 3,
   partition_plane = NULL,
-  ref = c(0, 0, 0),
+  ref = NULL,
   data_max = NULL,
   volume_multiplier = 1,
   classification_method = c("partition_side", "both_surfaces"),
@@ -43,8 +43,9 @@ bounding box.}
 supplied, candidates are assigned to part 1 or part 2 by signed distance to
 this plane.}
 
-\item{ref}{A known interior reference point in the same coordinate system as
-`data`.}
+\item{ref}{Optional known interior reference point in the same coordinate
+system as `data`. If \code{NULL}, the data centroid is projected onto
+\code{partition_plane} when available; otherwise the data centroid is used.}
 
 \item{data_max}{Optional numeric length-3 scale. If supplied, candidates are
 sampled from `[-data_max, data_max]` rather than the data bounding box.}

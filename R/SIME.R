@@ -725,6 +725,7 @@ SIME_select_path <- function(
 
   list(
     rule = "largest eta with SIME MSD <= c * baseline MSD; multiple c values share one increasing eta path",
+    seed = seed,
     output_mode = output_mode,
     c = c_values,
     summary = summary,
