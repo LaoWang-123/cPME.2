@@ -20,7 +20,8 @@ SIME_select_path(
   seed = NULL,
   output_mode = c("compact", "full"),
   shrinkage_grid = NULL,
-  shrinkage_seed = 123,
+  shrinkage_method = c("data_projection", "grid"),
+  shrinkage_grid_name = NULL,
   verbose = TRUE
 )
 }
@@ -51,14 +52,25 @@ unique eta fits; \code{"full"} keeps every evaluated eta fit.}
 \item{shrinkage_grid}{Parameter grid used for shrinkage. If \code{NULL},
 a 40 by 40 disk grid from \code{make_uv_grid()} is used.}
 
-\item{shrinkage_seed}{Seed passed to \code{calc_correspondence_msd()}.}
+\item{shrinkage_method}{Method used to evaluate shrinkage.
+\code{"data_projection"} is the default and
+projects all rows of \code{data2} onto \code{f2_fun} and compares
+manifolds at those projected parameter locations. \code{"grid"} compares
+manifolds on \code{shrinkage_grid}.}
+
+\item{shrinkage_grid_name}{Optional label for a user-supplied
+\code{shrinkage_grid}. If omitted, grid shrinkage is labeled
+\code{"default_disk_40x40"} for the default grid or \code{"user_grid"} for
+a supplied grid.}
 
 \item{verbose}{Logical.}
 }
 \value{
 A list with \code{summary}, \code{eta_path}, and \code{fits}. In
   compact mode, \code{fits} stores only selected unique eta fits. In full
-  mode, \code{fits} stores every evaluated eta fit.
+  mode, \code{fits} stores every evaluated eta fit. The top-level
+  \code{shrinkage_method} records whether shrinkage used
+  \code{"data_projection"} or a named grid.
 }
 \description{
 This is an experimental multi-\code{c} wrapper for \code{SIME_select()}.

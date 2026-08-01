@@ -421,12 +421,22 @@ SIME_select <- function(
 #'   unique eta fits; \code{"full"} keeps every evaluated eta fit.
 #' @param shrinkage_grid Parameter grid used for shrinkage. If \code{NULL},
 #'   a 40 by 40 disk grid from \code{make_uv_grid()} is used.
-#' @param shrinkage_seed Seed passed to \code{calc_correspondence_msd()}.
+#' @param shrinkage_method Method used to evaluate shrinkage.
+#'   \code{"data_projection"} is the default and
+#'   projects all rows of \code{data2} onto \code{f2_fun} and compares
+#'   manifolds at those projected parameter locations. \code{"grid"} compares
+#'   manifolds on \code{shrinkage_grid}.
+#' @param shrinkage_grid_name Optional label for a user-supplied
+#'   \code{shrinkage_grid}. If omitted, grid shrinkage is labeled
+#'   \code{"default_disk_40x40"} for the default grid or \code{"user_grid"} for
+#'   a supplied grid.
 #' @param verbose Logical.
 #'
 #' @return A list with \code{summary}, \code{eta_path}, and \code{fits}. In
 #'   compact mode, \code{fits} stores only selected unique eta fits. In full
-#'   mode, \code{fits} stores every evaluated eta fit.
+#'   mode, \code{fits} stores every evaluated eta fit. The top-level
+#'   \code{shrinkage_method} records whether shrinkage used
+#'   \code{"data_projection"} or a named grid.
 #' @export
 SIME_select_path <- function(
     f1_fun,
@@ -452,11 +462,13 @@ SIME_select_path <- function(
     seed = NULL,
     output_mode = c("compact", "full"),
     shrinkage_grid = NULL,
-    shrinkage_seed = 123,
+    shrinkage_method = c("data_projection", "grid"),
+    shrinkage_grid_name = NULL,
     verbose = TRUE
 ) {
 
   output_mode <- match.arg(output_mode)
+  shrinkage_method <- match.arg(shrinkage_method)
 
   data2 <- as.matrix(data2)
   D <- ncol(data2)
@@ -472,11 +484,66 @@ SIME_select_path <- function(
 
   if (!is.null(seed)) set.seed(seed)
 
-  if (is.null(shrinkage_grid)) {
+  shrinkage_grid_supplied <- !is.null(shrinkage_grid)
+  if (shrinkage_method == "grid" && !shrinkage_grid_supplied) {
     shrinkage_grid <- make_uv_grid(n_u = 40, n_v = 40, grid_type = "disk")
   }
+  shrinkage_label <- if (shrinkage_method == "data_projection") {
+    "data_projection"
+  } else if (!is.null(shrinkage_grid_name) &&
+             length(shrinkage_grid_name) == 1L &&
+             nzchar(shrinkage_grid_name)) {
+    as.character(shrinkage_grid_name)
+  } else if (!shrinkage_grid_supplied) {
+    "default_disk_40x40"
+  } else {
+    "user_grid"
+  }
 
-  compute_saved_shrinkage <- function(fits) {
+  eval_on_params <- function(f, params) {
+    t(vapply(seq_len(nrow(params)), function(i) {
+      as.numeric(f(as.numeric(params[i, , drop = TRUE])))
+    }, numeric(D)))
+  }
+
+  nearest_parameter_init <- function(X, centers, center_params) {
+    X <- as.matrix(X)
+    centers <- as.matrix(centers)
+    center_params <- as.matrix(center_params)
+
+    nearest_idx <- vapply(seq_len(nrow(X)), function(i) {
+      x_i <- matrix(
+        X[i, ],
+        nrow = nrow(centers),
+        ncol = ncol(centers),
+        byrow = TRUE
+      )
+      which.min(rowSums((centers - x_i)^2))
+    }, integer(1))
+
+    center_params[nearest_idx, , drop = FALSE]
+  }
+
+  resolve_shrinkage_params <- function(init2) {
+    if (shrinkage_method == "grid") {
+      return(as.matrix(shrinkage_grid))
+    }
+
+    init_guess <- nearest_parameter_init(
+      X = data2,
+      centers = init2$centers,
+      center_params = init2$parameterization
+    )
+
+    calc_params(
+      f = f2_fun,
+      X = data2,
+      init_params = init_guess,
+      f_input = "vector"
+    )
+  }
+
+  compute_saved_shrinkage <- function(fits, shrinkage_params) {
     empty <- data.frame(
       fit_ref = character(0),
       sime_to_f1_msd = numeric(0),
@@ -489,39 +556,24 @@ SIME_select_path <- function(
       return(empty)
     }
 
-    f1_data <- generate_surface_data(
-      f = f1_fun,
-      noise_sd = 0,
-      seed = shrinkage_seed,
-      uv_grid = shrinkage_grid
-    )
-    f2_data <- generate_surface_data(
-      f = f2_fun,
-      noise_sd = 0,
-      seed = shrinkage_seed,
-      uv_grid = shrinkage_grid
-    )
+    f1_data <- eval_on_params(f1_fun, shrinkage_params)
+    f2_data <- eval_on_params(f2_fun, shrinkage_params)
 
-    if (!all(dim(f1_data$XYZ) == dim(f2_data$XYZ))) {
+    if (!all(dim(f1_data) == dim(f2_data))) {
       stop("Reference and baseline manifolds do not have matching output dimensions.")
     }
 
-    f2_to_f1_msd <- mean(rowSums((f2_data$XYZ - f1_data$XYZ)^2))
+    f2_to_f1_msd <- mean(rowSums((f2_data - f1_data)^2))
 
     rows <- lapply(names(fits), function(fit_ref) {
       fit <- fits[[fit_ref]]
-      sime_data <- generate_surface_data(
-        f = fit$embedding_map,
-        noise_sd = 0,
-        seed = shrinkage_seed,
-        uv_grid = shrinkage_grid
-      )
-      if (!all(dim(sime_data$XYZ) == dim(f1_data$XYZ))) {
+      sime_data <- eval_on_params(fit$embedding_map, shrinkage_params)
+      if (!all(dim(sime_data) == dim(f1_data))) {
         stop("SIME and reference manifolds do not have matching output dimensions.")
       }
 
-      sime_to_f1_msd <- mean(rowSums((sime_data$XYZ - f1_data$XYZ)^2))
-      sime_to_f2_msd <- mean(rowSums((sime_data$XYZ - f2_data$XYZ)^2))
+      sime_to_f1_msd <- mean(rowSums((sime_data - f1_data)^2))
+      sime_to_f2_msd <- mean(rowSums((sime_data - f2_data)^2))
       shrinkage_ratio <- if (isTRUE(all.equal(f2_to_f1_msd, 0))) {
         NA_real_
       } else {
@@ -708,7 +760,8 @@ SIME_select_path <- function(
     keep_idx <- sort(unique(selected_idx[!is.na(selected_idx)]))
   }
   fits <- eta_fit_list[keep_idx]
-  saved_shrinkage <- compute_saved_shrinkage(fits)
+  shrinkage_params <- resolve_shrinkage_params(init2)
+  saved_shrinkage <- compute_saved_shrinkage(fits, shrinkage_params)
 
   summary$sime_to_f1_msd <- NA_real_
   summary$sime_to_f2_msd <- NA_real_
@@ -727,11 +780,12 @@ SIME_select_path <- function(
     rule = "largest eta with SIME MSD <= c * baseline MSD; multiple c values share one increasing eta path",
     seed = seed,
     output_mode = output_mode,
+    shrinkage_method = shrinkage_label,
     c = c_values,
     summary = summary,
     eta_path = eta_path,
     fits = fits,
-    shrinkage_grid = shrinkage_grid
+    shrinkage_grid = if (shrinkage_method == "grid") shrinkage_grid else NULL
   )
 }
 
