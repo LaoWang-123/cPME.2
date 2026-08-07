@@ -1,5 +1,55 @@
 # SIME code
 
+.make_sime_embedding <- function(coefs, params, Ua, d) {
+  coefs <- as.matrix(coefs)
+  params_all <- rbind(as.matrix(params), as.matrix(Ua))
+  I_all <- nrow(params_all)
+  d <- as.integer(d)
+
+  env <- new.env(parent = parent.env(environment()))
+  env$coefs <- coefs
+  env$params_all <- params_all
+  env$I_all <- I_all
+  env$d <- d
+
+  f <- function(parameters) {
+    as.vector(
+      (t(coefs[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, params_all, 4 - d)) +
+        (t(coefs[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
+           matrix(c(1, parameters), ncol = 1))
+    )
+  }
+  environment(f) <- env
+  f
+}
+
+.calc_sime_correspondence_msd <- function(f, params, points) {
+  params <- as.matrix(params)
+  points <- as.matrix(points)
+  pred <- t(vapply(seq_len(nrow(params)), function(i) {
+    as.numeric(f(as.numeric(params[i, , drop = TRUE])))
+  }, numeric(ncol(points))))
+  mean(rowSums((pred - points)^2))
+}
+
+.nearest_parameter_init <- function(X, centers, center_params) {
+  X <- as.matrix(X)
+  centers <- as.matrix(centers)
+  center_params <- as.matrix(center_params)
+
+  nearest_idx <- vapply(seq_len(nrow(X)), function(i) {
+    x_i <- matrix(
+      X[i, ],
+      nrow = nrow(centers),
+      ncol = ncol(centers),
+      byrow = TRUE
+    )
+    which.min(rowSums((centers - x_i)^2))
+  }, integer(1))
+
+  center_params[nearest_idx, , drop = FALSE]
+}
+
 #' SIME with anchor penalty + lambda screening
 #' This code is run with given eta and chose lambda automatically
 #'
@@ -9,6 +59,22 @@
 #' @param data2 raw data matrix (n x D) used in calc_msd (PME criterion)
 #' @param eta anchor weight (penalty strength)
 #' @param lambda tuning vector (can be length 1 or longer, like PME exp(-15:5))
+#' @param lambda_selection Criterion used to select lambda. \code{"subject_only"}
+#'   is the original SIME behavior and selects lambda by raw subject MSD only.
+#'   \code{"anchor_weighted"} selects lambda by
+#'   \code{(subject_MSD + eta * anchor_MSD) / (1 + eta)}, where
+#'   \code{anchor_MSD} is computed on the fixed template anchors used in the
+#'   SIME fit. \code{"template_all_weighted"} uses the same weighted criterion
+#'   but replaces anchor MSD with direct-correspondence MSD over the raw
+#'   subject points projected to \code{registered_fun}; their parameter values
+#'   are then evaluated on \code{f1_fun} to get the corresponding template
+#'   points.
+#' @param registered_fun Registered subject surface used to build automatic
+#'   all-template correspondences when
+#'   \code{lambda_selection = "template_all_weighted"}.
+#' @param template_points,template_params Optional advanced override for
+#'   direct-correspondence template data. In the standard workflow these are
+#'   built automatically from \code{registered_fun}.
 #' @param d intrinsic dimension (default 2 for surface)
 #' @param epsilon,max_iter,SSD_ratio_threshold same as PME loop controls
 #' @param verbose print_SSD like PME
@@ -21,6 +87,10 @@ SIME <- function(
     data2,
     eta = 0.05,
     lambda = exp(-15:5),
+    lambda_selection = c("subject_only", "anchor_weighted", "template_all_weighted"),
+    registered_fun = NULL,
+    template_points = NULL,
+    template_params = NULL,
     d = 2,
     epsilon = 1,
     max_iter = 100,
@@ -28,10 +98,27 @@ SIME <- function(
     verbose = FALSE
 ) {
 
+  lambda_selection <- match.arg(lambda_selection)
+
   if (!exists("calc_msd", mode = "function"))
     stop("[SIMEpme] calc_msd() not found. Load PME utilities first.")
   if (is.null(init2$km))
     stop("[SIMEpme] init2$km is required for calc_msd().")
+  if (lambda_selection == "template_all_weighted") {
+    if ((is.null(template_points) || is.null(template_params)) && is.null(registered_fun)) {
+      stop("registered_fun is required when lambda_selection = 'template_all_weighted' unless template_points and template_params are supplied.")
+    }
+    if (!is.null(template_points) || !is.null(template_params)) {
+      if (is.null(template_points) || is.null(template_params)) {
+        stop("template_points and template_params must be supplied together.")
+      }
+      template_points <- as.matrix(template_points)
+      template_params <- as.matrix(template_params)
+      if (nrow(template_points) != nrow(template_params)) {
+        stop("template_points and template_params must have the same number of rows.")
+      }
+    }
+  }
 
   data2 <- as.matrix(data2)
   D <- ncol(data2)
@@ -42,6 +129,18 @@ SIME <- function(
   X2 <- as.matrix(init2$centers)                # I x 3
   U2_init <- as.matrix(init2$parameterization)  # I x 2
   I <- nrow(X2)
+
+  if (lambda_selection == "template_all_weighted" && is.null(template_points)) {
+    template_params <- calc_params(
+      f = registered_fun,
+      X = data2,
+      init_params = .nearest_parameter_init(data2, X2, U2_init),
+      f_input = "vector"
+    )
+    template_points <- t(vapply(seq_len(nrow(template_params)), function(i) {
+      as.numeric(f1_fun(as.numeric(template_params[i, , drop = TRUE])))
+    }, numeric(D)))
+  }
 
   theta <- init2$theta_hat
   if (is.null(theta)) theta <- rep(1, I)
@@ -58,7 +157,10 @@ SIME <- function(
   I_all <- nrow(X_all)                   # 2I
 
   # storage like PME
-  mse <- vector()
+  subject_mse <- vector()
+  anchor_mse <- rep(NA_real_, length(lambda))
+  template_mse <- rep(NA_real_, length(lambda))
+  selection_mse <- vector()
   coefs <- list()
   parameterization <- list()
   embeddings <- list()
@@ -155,48 +257,62 @@ SIME <- function(
       }
     }
 
-    # PME criterion: MSD on raw data
-    mse[tuning_idx] <- calc_msd(data2, init2$km, f_embedding, params, D, d) # Maybe need to check later
+    # PME criterion: MSD on raw subject data.
+    subject_mse[tuning_idx] <- calc_msd(data2, init2$km, f_embedding, params, D, d)
+    anchor_mse[tuning_idx] <- .calc_sime_correspondence_msd(f_embedding, Ua, Xa)
+    if (lambda_selection == "template_all_weighted") {
+      template_mse[tuning_idx] <- .calc_sime_correspondence_msd(
+        f = f_embedding,
+        params = template_params,
+        points = template_points
+      )
+    }
+
+    selection_mse[tuning_idx] <- switch(
+      lambda_selection,
+      subject_only = subject_mse[tuning_idx],
+      anchor_weighted = (subject_mse[tuning_idx] + eta * anchor_mse[tuning_idx]) / (1 + eta),
+      template_all_weighted = (subject_mse[tuning_idx] + eta * template_mse[tuning_idx]) / (1 + eta)
+    )
 
     if (verbose == TRUE) {
-      message(sprintf("When lambda = %s, MSD = %s.",
+      message(sprintf("When lambda = %s, subject MSD = %s, selection MSD = %s.",
                       as.character(lambda[tuning_idx]),
-                      as.character(mse[tuning_idx])))
+                      as.character(subject_mse[tuning_idx]),
+                      as.character(selection_mse[tuning_idx])))
     }
 
     # store path objects like PME
     coefs[[tuning_idx]] <- spline_coefs
     parameterization[[tuning_idx]] <- params
 
-    embeddings[[tuning_idx]] <- function(parameters) {
-        as.vector(
-          (t(coefs[[tuning_idx]][1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(parameterization[[tuning_idx]], Ua), 4 - d)) +
-            (t(coefs[[tuning_idx]][(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
-               matrix(c(1, parameters), ncol = 1))
-        )
-      }
+    embeddings[[tuning_idx]] <- .make_sime_embedding(
+      coefs = coefs[[tuning_idx]],
+      params = parameterization[[tuning_idx]],
+      Ua = Ua,
+      d = d
+    )
 
 
     # PME early stop: last 4 MSD nondecreasing => break
     if (tuning_idx >= 4) {
-      if (!is.unsorted(mse[(tuning_idx - 3):tuning_idx])) {
+      if (!is.unsorted(selection_mse[(tuning_idx - 3):tuning_idx])) {
         break
       }
     }
   }
 
-  optimal_idx <- min(which(mse == min(mse)))
+  optimal_idx <- min(which(selection_mse == min(selection_mse, na.rm = TRUE)))
 
   coefs_opt <- coefs[[optimal_idx]]
   params_opt <- parameterization[[optimal_idx]]
 
-  embedding_opt <- function(parameters) {
-    as.vector(
-      (t(coefs_opt[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(params_opt, Ua), 4 - d)) +
-        (t(coefs_opt[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
-           matrix(c(1, parameters), ncol = 1))
-    )
-  }
+  embedding_opt <- .make_sime_embedding(
+    coefs = coefs_opt,
+    params = params_opt,
+    Ua = Ua,
+    d = d
+  )
 
   # return pme-like + sime-specific extras
   list(
@@ -207,7 +323,12 @@ SIME <- function(
     anchors = list(Ua = Ua, Xa = Xa, eta = eta),
     knots = init2$km,
     tuning = lambda[optimal_idx],
-    MSD = mse,
+    MSD = subject_mse,
+    subject_MSD = subject_mse,
+    anchor_MSD = anchor_mse,
+    template_MSD = template_mse,
+    selection_MSD = selection_mse,
+    lambda_selection = lambda_selection,
     coefs = coefs,
     parameterization = parameterization,
     tuning_vec = lambda,
@@ -246,6 +367,9 @@ SIME_select <- function(
     c = 1.3,
     eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
     lambda = exp(-15:5),
+    lambda_selection = c("subject_only", "anchor_weighted", "template_all_weighted"),
+    template_points = NULL,
+    template_params = NULL,
     d = 2,
     epsilon = 1,
     max_iter = 100,
@@ -264,6 +388,7 @@ SIME_select <- function(
     verbose = TRUE
 ) {
 
+  lambda_selection <- match.arg(lambda_selection)
 
   data2 <- as.matrix(data2)
   n <- nrow(data2)
@@ -302,6 +427,18 @@ SIME_select <- function(
   # ----------------------------
   baseline_msd <- calc_msd(x = data2, km = init2$km,f = f2_fun,t = init2$parameterization,D = D,d = d)
 
+  if (lambda_selection == "template_all_weighted" && is.null(template_points)) {
+    template_params <- calc_params(
+      f = f2_fun,
+      X = data2,
+      init_params = .nearest_parameter_init(data2, init2$centers, init2$parameterization),
+      f_input = "vector"
+    )
+    template_points <- t(vapply(seq_len(nrow(template_params)), function(i) {
+      as.numeric(f1_fun(as.numeric(template_params[i, , drop = TRUE])))
+    }, numeric(D)))
+  }
+
   threshold <- c * baseline_msd
 
   if (verbose) {
@@ -313,6 +450,9 @@ SIME_select <- function(
   # storage
   # ----------------------------
   eta_fit_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_anchor_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_template_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_selection_msd <- rep(NA_real_, length(eta_vec))
   eta_lambda_star <- rep(NA_real_, length(eta_vec))
   eta_fit_list <- vector("list", length(eta_vec))
   is_admissible <- rep(FALSE, length(eta_vec))
@@ -331,6 +471,10 @@ SIME_select <- function(
       data2 = data2,
       eta = eta_now,
       lambda = lambda,
+      lambda_selection = lambda_selection,
+      registered_fun = f2_fun,
+      template_points = template_points,
+      template_params = template_params,
       d = d,
       epsilon = epsilon,
       max_iter = max_iter,
@@ -344,6 +488,9 @@ SIME_select <- function(
     fit_msd_now <- fit_e$MSD[idx_star]
 
     eta_fit_msd[e] <- fit_msd_now
+    eta_fit_anchor_msd[e] <- fit_e$anchor_MSD[idx_star]
+    eta_fit_template_msd[e] <- fit_e$template_MSD[idx_star]
+    eta_fit_selection_msd[e] <- fit_e$selection_MSD[idx_star]
     eta_lambda_star[e] <- fit_e$tuning
     eta_fit_list[[e]] <- fit_e
 
@@ -374,23 +521,31 @@ SIME_select <- function(
   # prepare output
   # ----------------------------
 
-  selected_eta <- eta_vec[selected_idx]
-  selected_fit <- eta_fit_list[[selected_idx]]
+  selected_eta <- if (is.na(selected_idx)) NA_real_ else eta_vec[selected_idx]
+  selected_fit <- if (is.na(selected_idx)) NULL else eta_fit_list[[selected_idx]]
 
   if (verbose) {
     message("==================================================")
-    message(sprintf("Selected eta = %g", selected_eta))
-    message(sprintf("Selected lambda = %g", eta_lambda_star[selected_idx]))
-    message(sprintf("Selected MSD = %g", eta_fit_msd[selected_idx]))
+    if (is.na(selected_idx)) {
+      message("No eta satisfied SIME MSD <= c * baseline MSD.")
+    } else {
+      message(sprintf("Selected eta = %g", selected_eta))
+      message(sprintf("Selected lambda = %g", eta_lambda_star[selected_idx]))
+      message(sprintf("Selected MSD = %g", eta_fit_msd[selected_idx]))
+    }
     message("==================================================")
   }
 
   list(
     rule = "largest eta with SIME MSD <= c * baseline MSD; early stop at first exceedance",
+    lambda_selection = lambda_selection,
     baseline_msd = baseline_msd,
     threshold = threshold,
     c = c,
     eta_fit_msd = eta_fit_msd,
+    eta_fit_anchor_msd = eta_fit_anchor_msd,
+    eta_fit_template_msd = eta_fit_template_msd,
+    eta_fit_selection_msd = eta_fit_selection_msd,
     eta_lambda_star = eta_lambda_star,
     admissible_eta = eta_vec[which(is_admissible)],
     selected_eta = selected_eta,
@@ -413,6 +568,10 @@ SIME_select <- function(
 #' @param c Positive threshold multiplier(s). Values are evaluated increasingly.
 #' @param eta_vec Candidate eta values. Will be sorted increasingly.
 #' @param lambda Candidate lambda values for \code{SIME()}.
+#' @param lambda_selection Criterion used by \code{SIME()} to select lambda.
+#' @param template_points,template_params Optional direct-correspondence
+#'   template data passed to \code{SIME()} when
+#'   \code{lambda_selection = "template_all_weighted"}.
 #' @param d Intrinsic dimension.
 #' @param epsilon,max_iter,SSD_ratio_threshold Same as in \code{SIME()}.
 #' @param init_args_f2 Arguments passed to \code{initialize_pme()}.
@@ -445,6 +604,9 @@ SIME_select_path <- function(
     c = 1.3,
     eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
     lambda = exp(-15:5),
+    lambda_selection = c("subject_only", "anchor_weighted", "template_all_weighted"),
+    template_points = NULL,
+    template_params = NULL,
     d = 2,
     epsilon = 1,
     max_iter = 100,
@@ -469,6 +631,7 @@ SIME_select_path <- function(
 
   output_mode <- match.arg(output_mode)
   shrinkage_method <- match.arg(shrinkage_method)
+  lambda_selection <- match.arg(lambda_selection)
 
   data2 <- as.matrix(data2)
   D <- ncol(data2)
@@ -620,9 +783,26 @@ SIME_select_path <- function(
     d = d
   )
 
+  if (lambda_selection == "template_all_weighted" && is.null(template_points)) {
+    template_params <- calc_params(
+      f = f2_fun,
+      X = data2,
+      init_params = nearest_parameter_init(
+        X = data2,
+        centers = init2$centers,
+        center_params = init2$parameterization
+      ),
+      f_input = "vector"
+    )
+    template_points <- eval_on_params(f1_fun, template_params)
+  }
+
   thresholds <- c_values * baseline_msd
 
   eta_fit_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_anchor_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_template_msd <- rep(NA_real_, length(eta_vec))
+  eta_fit_selection_msd <- rep(NA_real_, length(eta_vec))
   eta_lambda_star <- rep(NA_real_, length(eta_vec))
   eta_fit_list <- vector("list", length(eta_vec))
   eta_error_message <- rep(NA_character_, length(eta_vec))
@@ -664,6 +844,10 @@ SIME_select_path <- function(
             data2 = data2,
             eta = eta_now,
             lambda = lambda,
+            lambda_selection = lambda_selection,
+            registered_fun = f2_fun,
+            template_points = template_points,
+            template_params = template_params,
             d = d,
             epsilon = epsilon,
             max_iter = max_iter,
@@ -691,6 +875,9 @@ SIME_select_path <- function(
         if (is.na(idx_star)) idx_star <- which.min(fit_e$MSD)
 
         eta_fit_msd[e] <- fit_e$MSD[idx_star]
+        eta_fit_anchor_msd[e] <- fit_e$anchor_MSD[idx_star]
+        eta_fit_template_msd[e] <- fit_e$template_MSD[idx_star]
+        eta_fit_selection_msd[e] <- fit_e$selection_MSD[idx_star]
         eta_lambda_star[e] <- fit_e$tuning
         eta_fit_list[[e]] <- fit_e
       } else if (!is.na(eta_error_message[e])) {
@@ -729,6 +916,9 @@ SIME_select_path <- function(
   selected_eta <- ifelse(is.na(selected_idx), NA_real_, eta_vec[selected_idx])
   selected_lambda <- ifelse(is.na(selected_idx), NA_real_, eta_lambda_star[selected_idx])
   selected_msd <- ifelse(is.na(selected_idx), NA_real_, eta_fit_msd[selected_idx])
+  selected_anchor_msd <- ifelse(is.na(selected_idx), NA_real_, eta_fit_anchor_msd[selected_idx])
+  selected_template_msd <- ifelse(is.na(selected_idx), NA_real_, eta_fit_template_msd[selected_idx])
+  selected_selection_msd <- ifelse(is.na(selected_idx), NA_real_, eta_fit_selection_msd[selected_idx])
 
   fit_ref <- ifelse(is.na(selected_idx), NA_character_, names(eta_fit_list)[selected_idx])
 
@@ -739,6 +929,9 @@ SIME_select_path <- function(
     selected_eta = selected_eta,
     selected_lambda = selected_lambda,
     selected_msd = selected_msd,
+    selected_anchor_msd = selected_anchor_msd,
+    selected_template_msd = selected_template_msd,
+    selected_selection_msd = selected_selection_msd,
     selected_fit_ref = as.character(fit_ref),
     error_message = c_error_message,
     stringsAsFactors = FALSE
@@ -749,6 +942,9 @@ SIME_select_path <- function(
     eta_index = seq_along(eta_vec),
     eta = eta_vec,
     fit_msd = eta_fit_msd,
+    anchor_msd = eta_fit_anchor_msd,
+    template_msd = eta_fit_template_msd,
+    selection_msd = eta_fit_selection_msd,
     lambda_star = eta_lambda_star,
     evaluated = evaluated,
     error_message = eta_error_message,
@@ -778,6 +974,7 @@ SIME_select_path <- function(
 
   list(
     rule = "largest eta with SIME MSD <= c * baseline MSD; multiple c values share one increasing eta path",
+    lambda_selection = lambda_selection,
     seed = seed,
     output_mode = output_mode,
     shrinkage_method = shrinkage_label,

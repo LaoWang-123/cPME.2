@@ -1,4 +1,4 @@
-﻿# Legacy registration helper functions
+# Legacy registration helper functions
 #
 # These functions support `Registration_legacy`. They are intentionally kept
 # internal to the package; current workflows should use `Registration` and the

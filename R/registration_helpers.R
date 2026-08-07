@@ -1,4 +1,4 @@
-﻿# Current registration helper functions
+# Current registration helper functions
 #
 # These helpers support the grid-precomputed safe `Registration` class. They are
 # package-internal unless explicitly exported elsewhere.

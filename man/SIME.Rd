@@ -11,6 +11,10 @@ SIME(
   data2,
   eta = 0.05,
   lambda = exp(-15:5),
+  lambda_selection = c("subject_only", "anchor_weighted", "template_all_weighted"),
+  registered_fun = NULL,
+  template_points = NULL,
+  template_params = NULL,
   d = 2,
   epsilon = 1,
   max_iter = 100,
@@ -29,6 +33,25 @@ $theta_hat (optional), $km (required for calc_msd)}
 \item{eta}{anchor weight (penalty strength)}
 
 \item{lambda}{tuning vector (can be length 1 or longer, like PME exp(-15:5))}
+
+\item{lambda_selection}{Criterion used to select lambda. \code{"subject_only"}
+is the original SIME behavior and selects lambda by raw subject MSD only.
+\code{"anchor_weighted"} selects lambda by
+\code{(subject_MSD + eta * anchor_MSD) / (1 + eta)}, where
+\code{anchor_MSD} is computed on the fixed template anchors used in the
+SIME fit. \code{"template_all_weighted"} uses the same weighted criterion
+but replaces anchor MSD with direct-correspondence MSD over the raw
+subject points projected to \code{registered_fun}; their parameter values
+are then evaluated on \code{f1_fun} to get the corresponding template
+points.}
+
+\item{registered_fun}{Registered subject surface used to build automatic
+all-template correspondences when
+\code{lambda_selection = "template_all_weighted"}.}
+
+\item{template_points, template_params}{Optional advanced override for
+direct-correspondence template data. In the standard workflow these are
+built automatically from \code{registered_fun}.}
 
 \item{d}{intrinsic dimension (default 2 for surface)}
 

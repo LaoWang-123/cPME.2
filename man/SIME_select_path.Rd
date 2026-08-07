@@ -11,6 +11,9 @@ SIME_select_path(
   c = 1.3,
   eta_vec = c(exp(-15:-2), 0.1, exp(-1:5)),
   lambda = exp(-15:5),
+  lambda_selection = c("subject_only", "anchor_weighted", "template_all_weighted"),
+  template_points = NULL,
+  template_params = NULL,
   d = 2,
   epsilon = 1,
   max_iter = 100,
@@ -37,6 +40,12 @@ SIME_select_path(
 \item{eta_vec}{Candidate eta values. Will be sorted increasingly.}
 
 \item{lambda}{Candidate lambda values for \code{SIME()}.}
+
+\item{lambda_selection}{Criterion used by \code{SIME()} to select lambda.}
+
+\item{template_points, template_params}{Optional direct-correspondence
+template data passed to \code{SIME()} when
+\code{lambda_selection = "template_all_weighted"}.}
 
 \item{d}{Intrinsic dimension.}
 

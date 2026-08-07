@@ -1,4 +1,4 @@
-﻿#' PME + Registration iterative cycle
+#' PME + Registration iterative cycle
 #'
 #' Current cPME alternating workflow. This class fits initial PME models,
 #' registers the moving surface to the fixed surface with safe accepted-state
