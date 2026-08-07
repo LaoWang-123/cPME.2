@@ -1,5 +1,28 @@
 # SIME code
 
+.make_sime_embedding <- function(coefs, params, Ua, d) {
+  coefs <- as.matrix(coefs)
+  params_all <- rbind(as.matrix(params), as.matrix(Ua))
+  I_all <- nrow(params_all)
+  d <- as.integer(d)
+
+  env <- new.env(parent = parent.env(environment()))
+  env$coefs <- coefs
+  env$params_all <- params_all
+  env$I_all <- I_all
+  env$d <- d
+
+  f <- function(parameters) {
+    as.vector(
+      (t(coefs[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, params_all, 4 - d)) +
+        (t(coefs[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
+           matrix(c(1, parameters), ncol = 1))
+    )
+  }
+  environment(f) <- env
+  f
+}
+
 #' SIME with anchor penalty + lambda screening
 #' This code is run with given eta and chose lambda automatically
 #'
@@ -168,13 +191,12 @@ SIME <- function(
     coefs[[tuning_idx]] <- spline_coefs
     parameterization[[tuning_idx]] <- params
 
-    embeddings[[tuning_idx]] <- function(parameters) {
-        as.vector(
-          (t(coefs[[tuning_idx]][1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(parameterization[[tuning_idx]], Ua), 4 - d)) +
-            (t(coefs[[tuning_idx]][(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
-               matrix(c(1, parameters), ncol = 1))
-        )
-      }
+    embeddings[[tuning_idx]] <- .make_sime_embedding(
+      coefs = coefs[[tuning_idx]],
+      params = parameterization[[tuning_idx]],
+      Ua = Ua,
+      d = d
+    )
 
 
     # PME early stop: last 4 MSD nondecreasing => break
@@ -190,13 +212,12 @@ SIME <- function(
   coefs_opt <- coefs[[optimal_idx]]
   params_opt <- parameterization[[optimal_idx]]
 
-  embedding_opt <- function(parameters) {
-    as.vector(
-      (t(coefs_opt[1:I_all, , drop = FALSE]) %*% etaFunc(parameters, rbind(params_opt, Ua), 4 - d)) +
-        (t(coefs_opt[(I_all + 1):(I_all + d + 1), , drop = FALSE]) %*%
-           matrix(c(1, parameters), ncol = 1))
-    )
-  }
+  embedding_opt <- .make_sime_embedding(
+    coefs = coefs_opt,
+    params = params_opt,
+    Ua = Ua,
+    d = d
+  )
 
   # return pme-like + sime-specific extras
   list(
