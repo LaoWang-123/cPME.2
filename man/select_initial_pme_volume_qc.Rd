@@ -14,6 +14,11 @@ select_initial_pme_volume_qc(
   target_volume,
   n_trials = 100L,
   volume_rel_error_threshold = 0.5,
+  energy_window_multiplier = 1.2,
+  selection_strategy = c("first_energy_passing_volume",
+    "smallest_volume_error_in_energy_window"),
+  save_candidate_objects = TRUE,
+  evaluate_volume = TRUE,
   init_args = list(d = 2),
   pme_args = list(d = 2, lambda = exp(-15:5), max_iter = 100, verbose = FALSE,
     print_plots = FALSE),
@@ -49,6 +54,26 @@ estimation.}
 
 \item{volume_rel_error_threshold}{Relative volume error threshold.}
 
+\item{energy_window_multiplier}{Keep candidates whose proxy energy is no
+larger than this multiplier times the minimum proxy energy for volume QC
+and selection. Use \code{Inf} to evaluate all orientation-valid candidates.}
+
+\item{selection_strategy}{Either \code{"first_energy_passing_volume"} or
+\code{"smallest_volume_error_in_energy_window"}. The first strategy selects
+the lowest-energy candidate whose volume relative error is below
+\code{volume_rel_error_threshold}; the second is the previous behavior.}
+
+\item{save_candidate_objects}{If \code{TRUE}, return all orientation-valid
+initializations, PME fits, and orientation checks in the output object.}
+
+\item{evaluate_volume}{Logical. If \code{TRUE}, evaluate the legacy
+single-part volume guardrail inside this function. If \code{FALSE}, only
+generate orientation-valid candidate PME fits and proxy-energy rankings;
+the minimum-proxy-energy candidate is stored as a provisional selection.
+Use \code{FALSE} when candidates will be passed to
+\code{select_initial_pme_pair_volume_qc()} or
+\code{refine_initial_pme_pair_normal_ray_qc()}.}
+
 \item{init_args}{Arguments passed to \code{initialize_pme()}.}
 
 \item{pme_args}{Arguments passed to \code{pme()}.}
@@ -81,9 +106,9 @@ A list containing the selected initialization, selected PME,
 \description{
 This function runs repeated subject PME initializations, filters mirror-
 reversed parameterizations relative to a template initialization, ranks the
-surviving candidates by a registration proxy energy, and selects the first
-proxy-energy-ranked candidate whose single-part surface-volume relative
-error is no larger than \code{volume_rel_error_threshold}. If no candidate
-passes the threshold, the candidate with the smallest volume relative error
-is selected and flagged by \code{selection_rule}.
+surviving candidates by a registration proxy energy, and evaluates volume as
+a guardrail. By default, candidates are checked in increasing proxy-energy
+order and the first one passing the volume-error threshold is selected. This
+keeps proxy energy as the primary criterion while excluding implausible
+initial PME surfaces.
 }

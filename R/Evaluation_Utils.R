@@ -750,3 +750,446 @@ estimate_partitioned_surface_volume <- function(
   )
 }
 
+.surface_grid_points_for_ray <- function(fit, grid_n = 75L) {
+  component <- extract_sime_volume_components(fit)
+  params <- as.matrix(component$params)
+  u_seq <- seq(min(params[, 1]), max(params[, 1]), length.out = grid_n)
+  v_seq <- seq(min(params[, 2]), max(params[, 2]), length.out = grid_n)
+  uv <- as.matrix(expand.grid(u_seq, v_seq))
+  xyz <- t(vapply(seq_len(nrow(uv)), function(i) {
+    as.numeric(component$embedding_map(uv[i, ]))[1:3]
+  }, numeric(3)))
+  list(component = component, uv = uv, xyz = xyz)
+}
+
+.ray_minima_for_surface <- function(surface,
+                                    ref,
+                                    direction,
+                                    n_starts = 12L,
+                                    tol = 0.45,
+                                    min_t = 0.05) {
+  ref <- as.numeric(ref)[1:3]
+  direction <- as.numeric(direction)[1:3]
+  direction <- direction / sqrt(sum(direction^2))
+
+  rel <- sweep(surface$xyz, 2, ref, "-")
+  t_vals <- as.numeric(rel %*% direction)
+  perp <- sqrt(rowSums((rel - outer(t_vals, direction))^2))
+  keep <- which(t_vals > min_t & is.finite(perp))
+  if (length(keep) == 0L) {
+    return(data.frame(t = numeric(0), distance = numeric(0), u = numeric(0), v = numeric(0)))
+  }
+
+  keep <- keep[order(perp[keep], t_vals[keep])]
+  starts <- surface$uv[head(keep, n_starts), , drop = FALSE]
+  lower <- apply(surface$uv, 2, min)
+  upper <- apply(surface$uv, 2, max)
+
+  objective <- function(par) {
+    x <- as.numeric(surface$component$embedding_map(par))[1:3]
+    rel_x <- x - ref
+    t_x <- sum(rel_x * direction)
+    perp_x <- rel_x - t_x * direction
+    if (t_x <= min_t) {
+      return(1e8 + abs(t_x - min_t) * 1e4 + sum(perp_x^2))
+    }
+    sum(perp_x^2)
+  }
+
+  opt <- lapply(seq_len(nrow(starts)), function(i) {
+    stats::optim(
+      par = starts[i, ],
+      fn = objective,
+      method = "L-BFGS-B",
+      lower = lower,
+      upper = upper,
+      control = list(maxit = 80)
+    )
+  })
+
+  out <- do.call(rbind, lapply(opt, function(o) {
+    x <- as.numeric(surface$component$embedding_map(o$par))[1:3]
+    rel_x <- x - ref
+    t_x <- sum(rel_x * direction)
+    perp_x <- rel_x - t_x * direction
+    data.frame(
+      t = t_x,
+      distance = sqrt(sum(perp_x^2)),
+      u = o$par[1],
+      v = o$par[2],
+      stringsAsFactors = FALSE
+    )
+  }))
+  out <- out[is.finite(out$t) & out$t > min_t & out$distance <= tol, , drop = FALSE]
+  if (nrow(out) == 0L) {
+    return(out)
+  }
+
+  out <- out[order(out$t, out$distance), , drop = FALSE]
+  selected <- integer(0)
+  for (i in seq_len(nrow(out))) {
+    if (length(selected) == 0L || all(abs(out$t[i] - out$t[selected]) > 1.0)) {
+      selected <- c(selected, i)
+    } else {
+      close <- selected[which.min(abs(out$t[i] - out$t[selected]))]
+      if (out$distance[i] < out$distance[close]) {
+        selected[selected == close] <- i
+      }
+    }
+  }
+  out[selected, , drop = FALSE]
+}
+
+#' Diagnose part-wise volume orientation by normal-ray intersection order
+#'
+#' @param fit_part1 Fitted surface for partition 1.
+#' @param fit_part2 Fitted surface for partition 2.
+#' @param data Full ROI point cloud used to resolve the default reference point.
+#' @param partition_plane Partition plane with \code{center} and \code{normal}.
+#' @param grid_n Number of parameter-grid points per direction used to seed
+#'   ray-surface intersection search.
+#' @param ray_tol Maximum perpendicular distance for accepting a ray hit.
+#' @param ray_min_t Minimum distance along the ray; hits closer than this to the
+#'   partition plane are treated as boundary contacts.
+#'
+#' @return A list containing the default reference point, intersection table,
+#'   and part-wise flip flags.
+normal_ray_orientation_qc <- function(fit_part1,
+                                      fit_part2,
+                                      data,
+                                      partition_plane,
+                                      grid_n = 75L,
+                                      ray_tol = 0.45,
+                                      ray_min_t = 0.05) {
+  ref_info <- resolve_volume_ref_point(
+    ref = NULL,
+    data = data,
+    partition_plane = partition_plane
+  )
+  ref <- ref_info$ref
+  normal <- as.numeric(partition_plane$normal)[1:3]
+  normal <- normal / sqrt(sum(normal^2))
+
+  surfaces <- list(
+    part1 = .surface_grid_points_for_ray(fit_part1, grid_n = grid_n),
+    part2 = .surface_grid_points_for_ray(fit_part2, grid_n = grid_n)
+  )
+
+  trace_direction <- function(direction_label, direction) {
+    rows <- do.call(rbind, lapply(names(surfaces), function(part) {
+      z <- .ray_minima_for_surface(
+        surfaces[[part]],
+        ref,
+        direction,
+        tol = ray_tol,
+        min_t = ray_min_t
+      )
+      if (nrow(z) == 0L) return(NULL)
+      data.frame(
+        direction = direction_label,
+        part = part,
+        t = z$t,
+        distance = z$distance,
+        u = z$u,
+        v = z$v,
+        stringsAsFactors = FALSE
+      )
+    }))
+    if (is.null(rows)) {
+      rows <- data.frame(
+        direction = character(0),
+        part = character(0),
+        t = numeric(0),
+        distance = numeric(0),
+        u = numeric(0),
+        v = numeric(0),
+        stringsAsFactors = FALSE
+      )
+    }
+    rows[order(rows$t, rows$distance), , drop = FALSE]
+  }
+
+  intersections <- rbind(
+    trace_direction("positive_normal", normal),
+    trace_direction("negative_normal", -normal)
+  )
+
+  flip <- c(part1 = FALSE, part2 = FALSE)
+  direction_counts <- table(factor(
+    intersections$direction,
+    levels = c("positive_normal", "negative_normal")
+  ))
+  for (direction_label in c("positive_normal", "negative_normal")) {
+    one_dir <- intersections[intersections$direction == direction_label, , drop = FALSE]
+    if (nrow(one_dir) >= 2L) {
+      flip[one_dir$part[1]] <- TRUE
+    }
+  }
+
+  list(
+    ref = ref,
+    ref_method = ref_info$ref_method,
+    intersections = intersections,
+    direction_counts = as.integer(direction_counts),
+    flip_part1 = unname(flip["part1"]),
+    flip_part2 = unname(flip["part2"]),
+    ray_tol = ray_tol,
+    ray_min_t = ray_min_t
+  )
+}
+
+#' Estimate Volume With Normal-Ray Orientation Correction
+#'
+#' This is a partitioned-surface volume estimator that uses the partition plane
+#' both to split candidate points and to determine part-wise orientation flips.
+#' If a ray from the plane reference point intersects two surfaces in one normal
+#' direction, the first encountered part is treated as orientation-reversed.
+#'
+#' @inheritParams estimate_partitioned_surface_volume
+#' @param grid_n Number of parameter-grid points per direction used to seed
+#'   ray-surface intersection search.
+#' @param ray_tol Maximum perpendicular distance for accepting a ray hit.
+#' @param ray_min_t Minimum distance along the ray before a hit is treated as a
+#'   crossing rather than a partition-plane boundary contact.
+#'
+#' @return A volume-result list with normal-ray orientation diagnostics.
+#' @export
+estimate_partitioned_surface_volume_normal_ray <- function(
+    fit_part1,
+    fit_part2,
+    data,
+    n_points = 10000,
+    limit_scaler = 0.05,
+    partition_plane,
+    volume_multiplier = 1,
+    seed = NULL,
+    grid_n = 75L,
+    ray_tol = 0.45,
+    ray_min_t = 0.05,
+    fail_on_error = FALSE) {
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+  data <- as.matrix(data)[, 1:3, drop = FALSE]
+
+  qc <- tryCatch(
+    normal_ray_orientation_qc(
+      fit_part1 = fit_part1,
+      fit_part2 = fit_part2,
+      data = data,
+      partition_plane = partition_plane,
+      grid_n = grid_n,
+      ray_tol = ray_tol,
+      ray_min_t = ray_min_t
+    ),
+    error = function(err) err
+  )
+  if (inherits(qc, "error")) {
+    if (isTRUE(fail_on_error)) stop(conditionMessage(qc), call. = FALSE)
+    return(empty_volume_result(
+      message = conditionMessage(qc),
+      stage = "normal_ray_orientation",
+      n_points = n_points,
+      partition_index = 3L,
+      partition_plane = partition_plane,
+      ref = c(NA_real_, NA_real_, NA_real_),
+      ref_method = "normal_ray_failed",
+      classification_method = "normal_ray_partition_side",
+      volume_multiplier = volume_multiplier,
+      warning_enabled = FALSE
+    ))
+  }
+
+  candidate_info <- sample_volume_candidates(
+    data = data,
+    n_points = n_points,
+    limit_scaler = limit_scaler
+  )
+  candidates <- candidate_info$candidates
+  part1_index <- signed_distance_to_partition_plane(candidates, partition_plane) >= 0
+  part2_index <- !part1_index
+
+  classification_result <- tryCatch({
+    interior <- rep(FALSE, nrow(candidates))
+    cls1 <- surface_interior_identification(
+      fit = fit_part1,
+      x = candidates[part1_index, , drop = FALSE],
+      ref = qc$ref
+    )
+    cls2 <- surface_interior_identification(
+      fit = fit_part2,
+      x = candidates[part2_index, , drop = FALSE],
+      ref = qc$ref
+    )
+    if (isTRUE(qc$flip_part1)) cls1 <- !cls1
+    if (isTRUE(qc$flip_part2)) cls2 <- !cls2
+    interior[part1_index] <- cls1
+    interior[part2_index] <- cls2
+    interior
+  }, error = function(err) err)
+
+  if (inherits(classification_result, "error")) {
+    if (isTRUE(fail_on_error)) stop(conditionMessage(classification_result), call. = FALSE)
+    return(empty_volume_result(
+      message = conditionMessage(classification_result),
+      stage = "classification",
+      n_points = n_points,
+      partition_index = 3L,
+      partition_plane = partition_plane,
+      ref = qc$ref,
+      ref_method = paste0(qc$ref_method, "+normal_ray_order"),
+      classification_method = "normal_ray_partition_side",
+      volume_multiplier = volume_multiplier,
+      warning_enabled = FALSE
+    ))
+  }
+
+  interior <- classification_result
+  list(
+    volume = mean(interior) * candidate_info$full_volume * volume_multiplier,
+    interior = interior,
+    interior_candidates = candidates[interior, , drop = FALSE],
+    candidates = candidates,
+    full_volume = candidate_info$full_volume,
+    bounds = candidate_info$bounds,
+    n_points = n_points,
+    partition_index = 3L,
+    partition_plane = partition_plane,
+    ref = qc$ref,
+    ref_method = paste0(qc$ref_method, "+normal_ray_order"),
+    classification_method = "normal_ray_partition_side",
+    volume_multiplier = volume_multiplier,
+    volume_success = TRUE,
+    volume_log = data.frame(
+      level = "info",
+      stage = "complete",
+      message = "Surface volume estimated successfully with normal-ray orientation correction.",
+      stringsAsFactors = FALSE
+    ),
+    fit_types = c(part1 = "unknown", part2 = "unknown"),
+    normal_ray = qc,
+    flip_part1 = qc$flip_part1,
+    flip_part2 = qc$flip_part2
+  )
+}
+
+#' Estimate One Partition Volume With Normal-Ray Orientation Correction
+#'
+#' @param fit Candidate surface for \code{part_label}.
+#' @param counterpart_fit Surface for the other partition, used only to infer
+#'   normal-ray intersection order.
+#' @inheritParams estimate_single_partition_surface_volume
+#' @param grid_n Number of parameter-grid points per direction used to seed
+#'   ray-surface intersection search.
+#' @param ray_tol Maximum perpendicular distance for accepting a ray hit.
+#' @param ray_min_t Minimum distance along the ray before a hit is treated as a
+#'   crossing rather than a partition-plane boundary contact.
+#'
+#' @return A single-part volume-result list with normal-ray diagnostics.
+estimate_single_partition_surface_volume_normal_ray <- function(
+    fit,
+    counterpart_fit,
+    data,
+    partition_plane,
+    part_label = c("part1", "part2"),
+    n_points = 5000,
+    limit_scaler = 0.05,
+    volume_multiplier = 1,
+    seed = NULL,
+    grid_n = 75L,
+    ray_tol = 0.45,
+    ray_min_t = 0.05,
+    fail_on_error = FALSE) {
+  part_label <- match.arg(part_label)
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
+  data <- as.matrix(data)[, 1:3, drop = FALSE]
+
+  if (part_label == "part1") {
+    fit_part1 <- fit
+    fit_part2 <- counterpart_fit
+  } else {
+    fit_part1 <- counterpart_fit
+    fit_part2 <- fit
+  }
+
+  qc <- tryCatch(
+    normal_ray_orientation_qc(
+      fit_part1 = fit_part1,
+      fit_part2 = fit_part2,
+      data = data,
+      partition_plane = partition_plane,
+      grid_n = grid_n,
+      ray_tol = ray_tol,
+      ray_min_t = ray_min_t
+    ),
+    error = function(err) err
+  )
+  if (inherits(qc, "error")) {
+    if (isTRUE(fail_on_error)) stop(conditionMessage(qc), call. = FALSE)
+    return(list(
+      volume = NA_real_,
+      volume_success = FALSE,
+      message = conditionMessage(qc),
+      ref = c(NA_real_, NA_real_, NA_real_),
+      ref_method = "normal_ray_failed"
+    ))
+  }
+
+  candidate_info <- sample_volume_candidates(
+    data = data,
+    n_points = n_points,
+    limit_scaler = limit_scaler
+  )
+  candidates <- candidate_info$candidates
+  part1_index <- signed_distance_to_partition_plane(candidates, partition_plane) >= 0
+  side_index <- if (part_label == "part1") part1_index else !part1_index
+  flip_this_part <- if (part_label == "part1") qc$flip_part1 else qc$flip_part2
+
+  classification_result <- tryCatch(
+    surface_interior_identification(
+      fit = fit,
+      x = candidates[side_index, , drop = FALSE],
+      ref = qc$ref
+    ),
+    error = function(err) err
+  )
+  if (inherits(classification_result, "error")) {
+    if (isTRUE(fail_on_error)) stop(conditionMessage(classification_result), call. = FALSE)
+    return(list(
+      volume = NA_real_,
+      volume_success = FALSE,
+      message = conditionMessage(classification_result),
+      n_side_candidates = sum(side_index),
+      candidates = candidates,
+      full_volume = candidate_info$full_volume,
+      bounds = candidate_info$bounds,
+      ref = qc$ref,
+      ref_method = paste0(qc$ref_method, "+normal_ray_order"),
+      normal_ray = qc
+    ))
+  }
+
+  cls <- classification_result
+  if (isTRUE(flip_this_part)) cls <- !cls
+  interior <- rep(FALSE, nrow(candidates))
+  interior[side_index] <- cls
+  list(
+    volume = mean(interior) * candidate_info$full_volume * volume_multiplier,
+    volume_success = TRUE,
+    message = NA_character_,
+    n_side_candidates = sum(side_index),
+    interior = interior,
+    candidates = candidates,
+    full_volume = candidate_info$full_volume,
+    bounds = candidate_info$bounds,
+    ref = qc$ref,
+    ref_method = paste0(qc$ref_method, "+normal_ray_order"),
+    normal_ray = qc,
+    flip_this_part = flip_this_part,
+    flip_part1 = qc$flip_part1,
+    flip_part2 = qc$flip_part2
+  )
+}
+
